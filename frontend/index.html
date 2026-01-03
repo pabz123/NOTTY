@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Accountability Dashboard</title>
+
+<style>
+:root {
+  --pending: #f59e0b;
+  --missed: #ef4444;
+  --completed: #22c55e;
+  --bg: #f9fafb;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background: var(--bg);
+  padding: 20px;
+}
+
+h1 {
+  margin-bottom: 10px;
+}
+
+.dashboard {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.card {
+  padding: 15px;
+  border-radius: 8px;
+  color: white;
+  font-size: 18px;
+}
+
+.pending { background: var(--pending); }
+.missed { background: var(--missed); }
+.completed { background: var(--completed); }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+
+th, td {
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+.badge {
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: white;
+  font-size: 12px;
+}
+
+.badge.pending { background: var(--pending); }
+.badge.missed { background: var(--missed); }
+.badge.completed { background: var(--completed); }
+
+button {
+  padding: 5px 10px;
+  cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<h1>📊 Accountability System</h1>
+
+<div class="dashboard">
+  <div class="card pending">Pending: <span id="pendingCount">0</span></div>
+  <div class="card missed">Missed: <span id="missedCount">0</span></div>
+  <div class="card completed">Completed: <span id="completedCount">0</span></div>
+</div>
+
+<table>
+<thead>
+<tr>
+  <th>Title</th>
+  <th>Deadline</th>
+  <th>Status</th>
+  <th>Action</th>
+</tr>
+</thead>
+<tbody id="activityTable"></tbody>
+</table>
+
+<script>
+async function loadActivities() {
+  const res = await fetch("http://127.0.0.1:8000/activities");
+  const activities = await res.json();
+
+  let pending = 0, missed = 0, completed = 0;
+  const table = document.getElementById("activityTable");
+  table.innerHTML = "";
+
+  activities.forEach(a => {
+    if (a.status === "pending") pending++;
+    if (a.status === "missed") missed++;
+    if (a.status === "completed") completed++;
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${a.title}</td>
+      <td>${new Date(a.deadline).toLocaleString()}</td>
+      <td><span class="badge ${a.status}">${a.status}</span></td>
+      <td>
+        ${a.status === "pending"
+          ? `<button onclick="completeActivity(${a.id})">Complete</button>`
+          : ""}
+      </td>
+    `;
+    table.appendChild(row);
+  });
+
+  document.getElementById("pendingCount").textContent = pending;
+  document.getElementById("missedCount").textContent = missed;
+  document.getElementById("completedCount").textContent = completed;
+}
+
+async function completeActivity(id) {
+  await fetch(`http://127.0.0.1:8000/activities/${id}/complete`, { method: "POST" });
+  loadActivities();
+}
+
+loadActivities();
+setInterval(loadActivities, 30000);
+</script>
+
+</body>
+</html>
