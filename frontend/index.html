@@ -18,10 +18,6 @@ body {
   padding: 20px;
 }
 
-h1 {
-  margin-bottom: 10px;
-}
-
 .dashboard {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -73,11 +69,15 @@ button {
 
 <h1>📊 Accountability System</h1>
 
+<div id="notificationStatus" style="margin-bottom:15px;font-weight:bold;"></div>
+
 <div class="dashboard">
   <div class="card pending">Pending: <span id="pendingCount">0</span></div>
   <div class="card missed">Missed: <span id="missedCount">0</span></div>
   <div class="card completed">Completed: <span id="completedCount">0</span></div>
 </div>
+
+<div id="achievement" style="margin:15px 0;font-size:18px;"></div>
 
 <table>
 <thead>
@@ -85,13 +85,46 @@ button {
   <th>Title</th>
   <th>Deadline</th>
   <th>Status</th>
-  <th>Action</th>
+  <th>Actions</th>
 </tr>
 </thead>
 <tbody id="activityTable"></tbody>
 </table>
 
+<h3>Create Activity</h3>
+<input id="title" placeholder="Title">
+<input id="description" placeholder="Description">
+<input id="deadline" type="datetime-local">
+<button onclick="createActivity()">Create</button>
+
 <script>
+function updateNotificationStatus() {
+  const el = document.getElementById("notificationStatus");
+
+  if (Notification.permission === "granted") {
+    el.textContent = "🟢 Notifications enabled";
+    el.style.color = "green";
+  } else if (Notification.permission === "denied") {
+    el.textContent = "🔴 Notifications blocked";
+    el.style.color = "red";
+  } else {
+    el.textContent = "🟡 Notifications not decided";
+    el.style.color = "orange";
+  }
+}
+
+async function loadStats() {
+  const res = await fetch("http://127.0.0.1:8000/stats");
+  const stats = await res.json();
+
+  const el = document.getElementById("achievement");
+  el.textContent = stats.goal_reached
+    ? "🏆 Goal reached! Keep going!"
+    : "🎯 Goal not reached yet";
+
+  el.style.color = stats.goal_reached ? "green" : "gray";
+}
+
 async function loadActivities() {
   const res = await fetch("http://127.0.0.1:8000/activities");
   const activities = await res.json();
@@ -102,7 +135,12 @@ async function loadActivities() {
 
   activities.forEach(a => {
     if (a.status === "pending") pending++;
-    if (a.status === "missed") missed++;
+    if (a.status === "missed") {
+  new Notification("⏰ Missed Activity", {
+    body: a.title
+  });
+}
+
     if (a.status === "completed") completed++;
 
     const row = document.createElement("tr");
@@ -112,8 +150,9 @@ async function loadActivities() {
       <td><span class="badge ${a.status}">${a.status}</span></td>
       <td>
         ${a.status === "pending"
-          ? `<button onclick="completeActivity(${a.id})">Complete</button>`
+          ? `<button onclick="completeActivity(${a.id})">✔</button>`
           : ""}
+        <button onclick="deleteActivity(${a.id})">🗑</button>
       </td>
     `;
     table.appendChild(row);
@@ -124,12 +163,36 @@ async function loadActivities() {
   document.getElementById("completedCount").textContent = completed;
 }
 
+async function createActivity() {
+  const title = document.getElementById("title").value;
+  const description = document.getElementById("description").value;
+  const deadline = document.getElementById("deadline").value;
+
+  await fetch("http://127.0.0.1:8000/activities", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, description, deadline })
+  });
+
+  loadActivities();
+  loadStats();
+}
+
 async function completeActivity(id) {
   await fetch(`http://127.0.0.1:8000/activities/${id}/complete`, { method: "POST" });
   loadActivities();
+  loadStats();
 }
 
+async function deleteActivity(id) {
+  await fetch(`http://127.0.0.1:8000/activities/${id}`, { method: "DELETE" });
+  loadActivities();
+  loadStats();
+}
+
+updateNotificationStatus();
 loadActivities();
+loadStats();
 setInterval(loadActivities, 30000);
 </script>
 

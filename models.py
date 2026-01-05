@@ -2,6 +2,11 @@ from sqlalchemy import Column, Integer, String, DateTime
 from database import Base
 from datetime import datetime
 from sqlalchemy import DateTime
+from datetime import datetime
+
+deadline = Column(DateTime, nullable=False)
+created_at = Column(DateTime, default=datetime.utcnow)
+
 
 class Activity(Base):
     __tablename__ = "activities"

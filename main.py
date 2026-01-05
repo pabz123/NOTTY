@@ -1,4 +1,4 @@
-from scheduler import start_scheduler
+from scheduler import scheduler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
@@ -45,8 +45,8 @@ def create_activity(activity: ActivityCreate, db: Session = Depends(get_db)):
 def list_activities(db: Session = Depends(get_db)):
     return db.query(Activity).all()
 @app.on_event("startup")
-def startup_event():
-    start_scheduler()
+def start_scheduler():
+    scheduler.start()
 @app.put("/activities/{activity_id}/complete", response_model=ActivityResponse)
 def complete_activity(activity_id: int, db: Session = Depends(get_db)):
     activity = db.query(Activity).filter(Activity.id == activity_id).first()
@@ -109,3 +109,26 @@ def goal_status(db: Session = Depends(get_db)):
         "completed": completed,
         "reached": completed >= goal
     }
+@app.get("/stats")
+def get_stats(db: Session = Depends(get_db)):
+    total = db.query(Activity).count()
+    completed = db.query(Activity).filter(Activity.status == "completed").count()
+    missed = db.query(Activity).filter(Activity.status == "missed").count()
+
+    goal_reached = completed >= 5
+
+    return {
+        "total": total,
+        "completed": completed,
+        "missed": missed,
+        "goal_reached": goal_reached
+    }
+@app.delete("/activities/{activity_id}")
+def delete_activity(activity_id: int, db: Session = Depends(get_db)):
+    activity = db.query(Activity).get(activity_id)
+    if not activity:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    db.delete(activity)
+    db.commit()
+    return {"message": "Deleted"}
