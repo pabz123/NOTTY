@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from database import Base
 from datetime import datetime
 from sqlalchemy import DateTime
@@ -18,3 +18,11 @@ class Activity(Base):
     status = Column(String, default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
+    reminded = Column(Boolean, default=False)
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String, unique=True, index=True)
+    password_hash = Column(String)

@@ -113,6 +113,7 @@ function updateNotificationStatus() {
   }
 }
 
+
 async function loadStats() {
   const res = await fetch("http://127.0.0.1:8000/stats");
   const stats = await res.json();
@@ -135,7 +136,8 @@ async function loadActivities() {
 
   activities.forEach(a => {
     if (a.status === "pending") pending++;
-    if (a.status === "missed") {
+    if (a.status === "missed") { 
+	  missed++;
   new Notification("⏰ Missed Activity", {
     body: a.title
   });
@@ -166,12 +168,19 @@ async function loadActivities() {
 async function createActivity() {
   const title = document.getElementById("title").value;
   const description = document.getElementById("description").value;
-  const deadline = document.getElementById("deadline").value;
+  const localDeadline = document.getElementById("deadline").value;
 
+  const utcDeadline = new Date(localDeadline).toISOString();
+  const res = await fetch(...);
+  if (!res.ok) {
+  alert("Create failed");
+  return;
+}
+ 
   await fetch("http://127.0.0.1:8000/activities", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title, description, deadline })
+    body: JSON.stringify({ title, description, deadline: utcDeadline })
   });
 
   loadActivities();
@@ -189,6 +198,22 @@ async function deleteActivity(id) {
   loadActivities();
   loadStats();
 }
+
+const source = new EventSource("http://127.0.0.1:8000/events");
+
+source.onmessage = function(event) {
+  const data = JSON.parse(event.data);
+
+  new Notification("Accountability Update", {
+    body: `Task ${data.type}: ${data.title}`
+  });
+
+  loadActivities();
+};
+
+const localDeadline = document.getElementById("deadline").value;
+const utcDeadline = new Date(localDeadline).toISOString();
+
 
 updateNotificationStatus();
 loadActivities();
