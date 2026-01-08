@@ -2,88 +2,110 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Accountability Dashboard</title>
-
-<style>
-:root {
-  --pending: #f59e0b;
-  --missed: #ef4444;
-  --completed: #22c55e;
-  --bg: #f9fafb;
-}
-
-body {
-  font-family: Arial, sans-serif;
-  background: var(--bg);
-  padding: 20px;
-}
-
-.dashboard {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 15px;
-  margin-bottom: 20px;
-}
-
-.card {
-  padding: 15px;
-  border-radius: 8px;
-  color: white;
-  font-size: 18px;
-}
-
-.pending { background: var(--pending); }
-.missed { background: var(--missed); }
-.completed { background: var(--completed); }
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: white;
-}
-
-th, td {
-  padding: 10px;
-  border-bottom: 1px solid #ddd;
-}
-
-.badge {
-  padding: 4px 8px;
-  border-radius: 6px;
-  color: white;
-  font-size: 12px;
-}
-
-.badge.pending { background: var(--pending); }
-.badge.missed { background: var(--missed); }
-.badge.completed { background: var(--completed); }
-
-button {
-  padding: 5px 10px;
-  cursor: pointer;
-}
-</style>
+<link rel="stylesheet" href="styles.css">
 </head>
-
 <body>
+<div class="container">
 
-<h1>📊 Accountability System</h1>
-
-<div id="notificationStatus" style="margin-bottom:15px;font-weight:bold;"></div>
-
-<div class="dashboard">
-  <div class="card pending">Pending: <span id="pendingCount">0</span></div>
-  <div class="card missed">Missed: <span id="missedCount">0</span></div>
-  <div class="card completed">Completed: <span id="completedCount">0</span></div>
+<div class="header">
+  <h1>📊 Accountability System</h1>
+  <div class="header-controls">
+    <span id="notificationStatus" style="font-weight:bold;"></span>
+    <button id="toggleNotifications" class="toggle-btn" onclick="toggleNotifications()">Pause Notifications</button>
+    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark Mode">🌓</button>
+    <button onclick="showStatsModal()">📊 Stats</button>
+    <button onclick="openTemplatesView()">📋 Templates</button>
+    <button onclick="exportData()">📤 Export</button>
+    <button onclick="document.getElementById('importFile').click()">📥 Import</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+  </div>
 </div>
 
-<div id="achievement" style="margin:15px 0;font-size:18px;"></div>
+<div class="dashboard">
+  <div class="card pending">
+    <div>Pending</div>
+    <div class="card-value"><span id="pendingCount">0</span></div>
+  </div>
+  <div class="card missed">
+    <div>Missed</div>
+    <div class="card-value"><span id="missedCount">0</span></div>
+  </div>
+  <div class="card completed">
+    <div>Completed</div>
+    <div class="card-value"><span id="completedCount">0</span></div>
+  </div>
+</div>
 
+<div id="achievement" style="margin:15px 0;font-size:18px;font-weight:600;"></div>
+<div id="streakInfo" style="margin:15px 0;font-size:16px;"></div>
+
+<!-- Filters and Search -->
+<div class="filters">
+  <input id="searchInput" type="text" placeholder="Search activities..." onkeyup="loadActivities()">
+  <select id="statusFilter" onchange="loadActivities()">
+    <option value="">All Status</option>
+    <option value="pending">Pending</option>
+    <option value="missed">Missed</option>
+    <option value="completed">Completed</option>
+  </select>
+  <select id="priorityFilter" onchange="loadActivities()">
+    <option value="">All Priority</option>
+    <option value="high">High</option>
+    <option value="medium">Medium</option>
+    <option value="low">Low</option>
+  </select>
+  <select id="categoryFilter" onchange="loadActivities()">
+    <option value="">All Categories</option>
+    <option value="general">🔹 General</option>
+    <option value="work">💼 Work</option>
+    <option value="personal">👤 Personal</option>
+    <option value="health">💪 Health</option>
+    <option value="finance">💰 Finance</option>
+    <option value="education">📚 Education</option>
+    <option value="other">📌 Other</option>
+  </select>
+  <select id="sortBy" onchange="loadActivities()">
+    <option value="deadline">Sort by Deadline</option>
+    <option value="priority">Sort by Priority</option>
+    <option value="created_at">Sort by Created</option>
+  </select>
+  <select id="sortOrder" onchange="loadActivities()">
+    <option value="asc">Ascending</option>
+    <option value="desc">Descending</option>
+  </select>
+  <button onclick="showCalendarView()" style="margin-left: 10px;">📅 Calendar View</button>
+</div>
+
+<!-- Batch Operations -->
+<div style="margin: 15px 0; display: flex; gap: 10px; flex-wrap: wrap;">
+  <button onclick="selectAllActivities()">✅ Select All</button>
+  <button onclick="batchCompleteSelected()">✓ Complete Selected</button>
+  <button onclick="batchDeleteSelected()">🗑️ Delete Selected</button>
+  <select id="batchCategory">
+    <option value="">Change Category...</option>
+    <option value="general">🔹 General</option>
+    <option value="work">💼 Work</option>
+    <option value="personal">👤 Personal</option>
+    <option value="health">💪 Health</option>
+    <option value="finance">💰 Finance</option>
+    <option value="education">📚 Education</option>
+    <option value="other">📌 Other</option>
+  </select>
+  <button onclick="batchUpdateCategory()">Update Category</button>
+</div>
+
+<div class="table-container">
 <table>
 <thead>
 <tr>
+  <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
   <th>Title</th>
+  <th>Category</th>
+  <th>Priority</th>
   <th>Deadline</th>
+  <th>Est. Time</th>
   <th>Status</th>
   <th>Actions</th>
 </tr>
@@ -91,135 +113,185 @@ button {
 <tbody id="activityTable"></tbody>
 </table>
 
+<!-- Pagination Controls -->
+<div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 15px;">
+  <button onclick="previousPage()" id="prevBtn">← Previous</button>
+  <span id="pageInfo">Page 1</span>
+  <button onclick="nextPage()" id="nextBtn">Next →</button>
+  <select id="pageSize" onchange="changePageSize()">
+    <option value="25">25 per page</option>
+    <option value="50" selected>50 per page</option>
+    <option value="100">100 per page</option>
+  </select>
+</div>
+</div>
+
+<!-- Edit Modal -->
+<div id="overlay" class="overlay" onclick="closeEditForm()"></div>
+<div id="editForm" class="edit-form">
+  <h3>Edit Activity</h3>
+  <input id="editId" type="hidden">
+  <input id="editTitle" placeholder="Title">
+  <textarea id="editDescription" placeholder="Description" rows="3"></textarea>
+  <input id="editDeadline" type="datetime-local">
+  <select id="editPriority">
+    <option value="low">Low Priority</option>
+    <option value="medium">Medium Priority</option>
+    <option value="high">High Priority</option>
+  </select>
+  <select id="editCategory">
+    <option value="general">🔹 General</option>
+    <option value="work">💼 Work</option>
+    <option value="personal">👤 Personal</option>
+    <option value="health">💪 Health</option>
+    <option value="finance">💰 Finance</option>
+    <option value="education">📚 Education</option>
+    <option value="other">📌 Other</option>
+  </select>
+  <input id="editNotificationMinutes" type="number" placeholder="Notify before (mins)" min="5" max="1440">
+  <input id="editEstimatedMinutes" type="number" placeholder="Estimated time (mins)" min="5">
+  <div style="display: flex; gap: 10px; margin-top: 15px;">
+    <button onclick="saveEdit()">Save</button>
+    <button onclick="closeEditForm()">Cancel</button>
+  </div>
+</div>
+
 <h3>Create Activity</h3>
-<input id="title" placeholder="Title">
-<input id="description" placeholder="Description">
-<input id="deadline" type="datetime-local">
-<button onclick="createActivity()">Create</button>
+<div class="form-grid">
+  <input id="title" placeholder="Title">
+  <input id="description" placeholder="Description">
+  <input id="deadline" type="datetime-local">
+  <select id="priority">
+    <option value="medium">Medium Priority</option>
+    <option value="high">High Priority</option>
+    <option value="low">Low Priority</option>
+  </select>
+  <select id="category">
+    <option value="general">🔹 General</option>
+    <option value="work">💼 Work</option>
+    <option value="personal">👤 Personal</option>
+    <option value="health">💪 Health</option>
+    <option value="finance">💰 Finance</option>
+    <option value="education">📚 Education</option>
+    <option value="other">📌 Other</option>
+  </select>
+  <input id="notificationMinutes" type="number" placeholder="Notify before (mins)" value="30" min="5" max="1440">
+  <label><input id="isRecurring" type="checkbox"> Recurring Task</label>
+  <select id="recurrencePattern" disabled>
+    <option value="">No Recurrence</option>
+    <option value="daily">Daily</option>
+    <option value="weekly">Weekly</option>
+    <option value="monthly">Monthly</option>
+  </select>
+</div>
+<button onclick="createActivity()" style="margin-top: 10px;">Create</button>
 
-<script>
-function updateNotificationStatus() {
-  const el = document.getElementById("notificationStatus");
+<!-- Calendar View Modal -->
+<div id="calendarOverlay" class="overlay" onclick="closeCalendarView()" style="display: none;"></div>
+<div id="calendarView" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 1001; max-width: 90%; max-height: 80vh; overflow-y: auto;">
+  <h3>📅 Calendar View - Upcoming Deadlines</h3>
+  <div id="calendarContent"></div>
+  <button onclick="closeCalendarView()" style="margin-top: 15px;">Close</button>
+</div>
 
-  if (Notification.permission === "granted") {
-    el.textContent = "🟢 Notifications enabled";
-    el.style.color = "green";
-  } else if (Notification.permission === "denied") {
-    el.textContent = "🔴 Notifications blocked";
-    el.style.color = "red";
-  } else {
-    el.textContent = "🟡 Notifications not decided";
-    el.style.color = "orange";
-  }
-}
+<!-- Activity Notes Modal -->
+<div id="notesOverlay" class="overlay" onclick="closeNotesView()" style="display: none;"></div>
+<div id="notesView" class="notes-modal">
+  <h3>📝 Activity Notes</h3>
+  <input id="currentActivityId" type="hidden">
+  <div id="notesList" style="margin: 15px 0; max-height: 300px; overflow-y: auto;"></div>
+  <textarea id="newNote" placeholder="Add a note..." rows="3" style="width: 100%; padding: 8px; margin-top: 10px;"></textarea>
+  <div style="display: flex; gap: 10px; margin-top: 10px;">
+    <button onclick="addNote()">Add Note</button>
+    <button onclick="closeNotesView()">Close</button>
+  </div>
+</div>
 
+<!-- Stats Modal -->
+<div id="statsOverlay" class="overlay" onclick="closeStatsModal()" style="display: none;"></div>
+<div id="statsModal" class="calendar-modal" style="display: none;">
+  <h3>📊 Statistics Dashboard</h3>
+  <div id="statsContent">
+    <div style="margin-bottom: 20px;">
+      <h4>📈 Overall Stats</h4>
+      <div class="stat-item">Total Activities: <span id="statsTotalActivities">0</span></div>
+      <div class="stat-item">Completed: <span id="statsCompletedActivities">0</span></div>
+      <div class="stat-item">Pending: <span id="statsPendingActivities">0</span></div>
+      <div class="stat-item">Completion Rate: <span id="statsCompletionRate">0%</span></div>
+    </div>
+    <div style="margin-bottom: 20px;">
+      <h4>🔥 Streaks</h4>
+      <div class="stat-item">Current Streak: <span id="statsCurrentStreak">0</span> days</div>
+      <div class="stat-item">Longest Streak: <span id="statsLongestStreak">0</span> days</div>
+    </div>
+    <div style="margin-bottom: 20px;">
+      <h4>📊 Category Breakdown</h4>
+      <div id="categoryBreakdown"></div>
+    </div>
+    <div style="margin-bottom: 20px;">
+      <h4>🎯 Priority Breakdown</h4>
+      <div id="priorityBreakdown"></div>
+    </div>
+    <div>
+      <h4>🏆 Achievements</h4>
+      <div id="achievementsList"></div>
+    </div>
+  </div>
+  <button onclick="closeStatsModal()" style="margin-top: 15px;">Close</button>
+</div>
 
-async function loadStats() {
-  const res = await fetch("http://127.0.0.1:8000/stats");
-  const stats = await res.json();
+<!-- Subtasks Modal -->
+<div id="subtasksOverlay" class="overlay" onclick="closeSubtasksView()" style="display: none;"></div>
+<div id="subtasksView" class="notes-modal">
+  <h3>✅ Subtasks</h3>
+  <input id="currentSubtaskActivityId" type="hidden">
+  <div id="subtasksList" style="margin: 15px 0; max-height: 300px; overflow-y: auto;"></div>
+  <input id="newSubtask" placeholder="Add subtask..." style="width: 100%; padding: 8px; margin-top: 10px;">
+  <div style="display: flex; gap: 10px; margin-top: 10px;">
+    <button onclick="addSubtask()">Add Subtask</button>
+    <button onclick="closeSubtasksView()">Close</button>
+  </div>
+</div>
 
-  const el = document.getElementById("achievement");
-  el.textContent = stats.goal_reached
-    ? "🏆 Goal reached! Keep going!"
-    : "🎯 Goal not reached yet";
+<!-- Templates Modal -->
+<div id="templatesOverlay" class="overlay" onclick="closeTemplatesView()" style="display: none;"></div>
+<div id="templatesView" class="notes-modal">
+  <h3>📋 Activity Templates</h3>
+  <div id="templatesList" style="margin: 15px 0; max-height: 300px; overflow-y: auto;"></div>
+  <h4>Create New Template</h4>
+  <input id="templateName" placeholder="Template name..." style="width: 100%; padding: 8px; margin-top: 5px;">
+  <input id="templateTitle" placeholder="Title template..." style="width: 100%; padding: 8px; margin-top: 5px;">
+  <textarea id="templateDescription" placeholder="Description template..." rows="2" style="width: 100%; padding: 8px; margin-top: 5px;"></textarea>
+  <div style="display: flex; gap: 10px; margin-top: 10px;">
+    <button onclick="createTemplate()">Save Template</button>
+    <button onclick="closeTemplatesView()">Close</button>
+  </div>
+</div>
 
-  el.style.color = stats.goal_reached ? "green" : "gray";
-}
+<!-- History Modal -->
+<div id="historyOverlay" class="overlay" onclick="closeHistoryView()" style="display: none;"></div>
+<div id="historyView" class="notes-modal">
+  <h3>📜 Activity History</h3>
+  <input id="currentHistoryActivityId" type="hidden">
+  <div id="historyList" style="margin: 15px 0; max-height: 400px; overflow-y: auto;"></div>
+  <button onclick="closeHistoryView()" style="margin-top: 10px;">Close</button>
+</div>
 
-async function loadActivities() {
-  const res = await fetch("http://127.0.0.1:8000/activities");
-  const activities = await res.json();
+<!-- Attachments Modal -->
+<div id="attachmentsOverlay" class="overlay" onclick="closeAttachmentsView()" style="display: none;"></div>
+<div id="attachmentsView" class="notes-modal">
+  <h3>📎 Attachments</h3>
+  <input id="currentAttachmentActivityId" type="hidden">
+  <div id="attachmentsList" style="margin: 15px 0; max-height: 300px; overflow-y: auto;"></div>
+  <input type="file" id="attachmentFile" style="margin-top: 10px;">
+  <div style="display: flex; gap: 10px; margin-top: 10px;">
+    <button onclick="uploadAttachment()">Upload</button>
+    <button onclick="closeAttachmentsView()">Close</button>
+  </div>
+</div>
 
-  let pending = 0, missed = 0, completed = 0;
-  const table = document.getElementById("activityTable");
-  table.innerHTML = "";
+</div><!-- End container -->
 
-  activities.forEach(a => {
-    if (a.status === "pending") pending++;
-    if (a.status === "missed") { 
-	  missed++;
-  new Notification("⏰ Missed Activity", {
-    body: a.title
-  });
-}
-
-    if (a.status === "completed") completed++;
-
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td>${a.title}</td>
-      <td>${new Date(a.deadline).toLocaleString()}</td>
-      <td><span class="badge ${a.status}">${a.status}</span></td>
-      <td>
-        ${a.status === "pending"
-          ? `<button onclick="completeActivity(${a.id})">✔</button>`
-          : ""}
-        <button onclick="deleteActivity(${a.id})">🗑</button>
-      </td>
-    `;
-    table.appendChild(row);
-  });
-
-  document.getElementById("pendingCount").textContent = pending;
-  document.getElementById("missedCount").textContent = missed;
-  document.getElementById("completedCount").textContent = completed;
-}
-
-async function createActivity() {
-  const title = document.getElementById("title").value;
-  const description = document.getElementById("description").value;
-  const localDeadline = document.getElementById("deadline").value;
-
-  const utcDeadline = new Date(localDeadline).toISOString();
-  const res = await fetch(...);
-  if (!res.ok) {
-  alert("Create failed");
-  return;
-}
- 
-  await fetch("http://127.0.0.1:8000/activities", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title, description, deadline: utcDeadline })
-  });
-
-  loadActivities();
-  loadStats();
-}
-
-async function completeActivity(id) {
-  await fetch(`http://127.0.0.1:8000/activities/${id}/complete`, { method: "POST" });
-  loadActivities();
-  loadStats();
-}
-
-async function deleteActivity(id) {
-  await fetch(`http://127.0.0.1:8000/activities/${id}`, { method: "DELETE" });
-  loadActivities();
-  loadStats();
-}
-
-const source = new EventSource("http://127.0.0.1:8000/events");
-
-source.onmessage = function(event) {
-  const data = JSON.parse(event.data);
-
-  new Notification("Accountability Update", {
-    body: `Task ${data.type}: ${data.title}`
-  });
-
-  loadActivities();
-};
-
-const localDeadline = document.getElementById("deadline").value;
-const utcDeadline = new Date(localDeadline).toISOString();
-
-
-updateNotificationStatus();
-loadActivities();
-loadStats();
-setInterval(loadActivities, 30000);
-</script>
-
+<script src="app.js"></script>
 </body>
 </html>

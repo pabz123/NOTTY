@@ -31,23 +31,32 @@ scheduler.add_job(check_missed_activities, "interval", minutes=1)
 def check_due_soon():
     db = SessionLocal()
     now = datetime.now(timezone.utc)
-    threshold = now + timedelta(minutes=30)
 
-    due_soon = db.query(Activity).filter(
+    activities = db.query(Activity).filter(
         Activity.status == "pending",
-        Activity.reminded == False,
-        Activity.deadline <= threshold,
-        Activity.deadline > now
+        Activity.reminded == False
     ).all()
 
-    for activity in due_soon:
-        activity.reminded = True
-        asyncio.run(
-            notify({
-                "type": "due_soon",
-                "title": activity.title
-            })
-        )
+    for activity in activities:
+        # Skip snoozed activities
+        if activity.snoozed_until and activity.snoozed_until > now:
+            continue
+        
+        # Check if activity is due within its custom notification window
+        threshold = now + timedelta(minutes=activity.notification_minutes)
+        
+        if activity.deadline.tzinfo is None:
+            activity.deadline = activity.deadline.replace(tzinfo=timezone.utc)
+        
+        if activity.deadline <= threshold and activity.deadline > now:
+            activity.reminded = True
+            asyncio.run(
+                notify({
+                    "type": "due_soon",
+                    "title": activity.title,
+                    "minutes": activity.notification_minutes
+                })
+            )
 
     db.commit()
     db.close()
