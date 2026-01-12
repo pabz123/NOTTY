@@ -1,6 +1,6 @@
 from scheduler import scheduler
 from auth import get_current_user, get_password_hash, verify_password, create_token
-
+import json
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File, Request
 from fastapi import APIRouter
@@ -20,6 +20,15 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import os
 import aiofiles
+
+def to_utc(dt: datetime) -> datetime:
+    """
+    Convert any datetime (naive or aware) to UTC safely.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -109,6 +118,7 @@ def get_me(current_user: User = Depends(get_current_user)):
 @app.post("/activities", response_model=ActivityResponse)
 @limiter.limit(f"{settings.rate_limit_per_minute}/minute")
 def create_activity(request: Request, activity: ActivityCreate, db: Session = Depends(get_db)):
+ 
     try:
         # Validation
         if not activity.title or not activity.title.strip():
@@ -125,10 +135,11 @@ def create_activity(request: Request, activity: ActivityCreate, db: Session = De
         
         # Check if deadline is in the past
         now = datetime.now(timezone.utc)
-        activity_deadline = activity.deadline.replace(tzinfo=timezone.utc)
+        activity_deadline = to_utc(activity.deadline)
+        
         if activity_deadline < now:
             raise HTTPException(status_code=400, detail="Deadline cannot be in the past")
-
+        
         new_activity = Activity(
             title=activity.title.strip(),
             description=activity.description.strip() if activity.description else None,
@@ -243,7 +254,8 @@ def update_activity(activity_id: int, activity_update: ActivityUpdate, db: Sessi
         if activity_update.deadline is not None:
             # Check if new deadline is in the past
             now = datetime.now(timezone.utc)
-            new_deadline = activity_update.deadline.replace(tzinfo=timezone.utc)
+            new_deadline = to_utc(activity_update.deadline)
+
             if new_deadline < now:
                 raise HTTPException(status_code=400, detail="Deadline cannot be in the past")
             activity.deadline = new_deadline
@@ -298,11 +310,17 @@ def update_activity(activity_id: int, activity_update: ActivityUpdate, db: Sessi
     
 @app.on_event("startup")
 def start_scheduler():
-    scheduler.start()
+    if not scheduler.running:
+        scheduler.start()
+
     
+
+
 def broadcast(event: dict):
+    message = json.dumps(event)
     for q in subscribers:
-        q.put_nowait(event)
+        q.put_nowait(message)
+
 
     
 @app.get("/activities/missed", response_model=list[ActivityResponse])
@@ -886,20 +904,23 @@ def get_activity_history(activity_id: int, db: Session = Depends(get_db)):
     return history
 
 # Helper function to log activity history
-def log_activity_history(db: Session, activity_id: int, action: str, field_name: str = None, old_value: str = None, new_value: str = None):
-    try:
-        history_entry = ActivityHistory(
-            activity_id=activity_id,
-            action=action,
-            field_name=field_name,
-            old_value=old_value,
-            new_value=new_value
-        )
-        db.add(history_entry)
-        db.commit()
-    except Exception as e:
-        # Don't fail the main operation if history logging fails
-        print(f"Failed to log history: {str(e)}")
+def log_activity_history(
+    db: Session,
+    activity_id: int,
+    action: str,
+    field_name: str = None,
+    old_value: str = None,
+    new_value: str = None
+):
+    history_entry = ActivityHistory(
+        activity_id=activity_id,
+        action=action,
+        field_name=field_name,
+        old_value=old_value,
+        new_value=new_value
+    )
+    db.add(history_entry)
+
 
 # ==================== FILE ATTACHMENT ENDPOINTS ====================
 

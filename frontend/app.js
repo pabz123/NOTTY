@@ -7,17 +7,39 @@ function toggleTheme() {
   localStorage.setItem('theme', newTheme);
 }
 
-// Load saved theme
+// Load saved theme immediately
 const savedTheme = localStorage.getItem('theme') || 'light';
 document.documentElement.setAttribute('data-theme', savedTheme);
 
-// Enable/disable recurrence pattern based on checkbox
-document.getElementById('isRecurring').addEventListener('change', function() {
-  document.getElementById('recurrencePattern').disabled = !this.checked;
-  if (!this.checked) {
-    document.getElementById('recurrencePattern').value = '';
-  }
-});
+// Timezone helper - Get user's timezone name
+function getUserTimezone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+// Format date/time in user's local timezone
+function formatLocalDateTime(isoString) {
+  const date = new Date(isoString);
+  return date.toLocaleString('en-US', { 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric', 
+    hour: '2-digit', 
+    minute: '2-digit',
+    hour12: true 
+  });
+}
+
+// Log timezone on page load for debugging
+console.log('User Timezone:', getUserTimezone());
+console.log('Current Local Time:', new Date().toLocaleString('en-US', { 
+  year: 'numeric', 
+  month: 'short', 
+  day: 'numeric', 
+  hour: '2-digit', 
+  minute: '2-digit',
+  hour12: true,
+  timeZoneName: 'short'
+}));
 
 let notificationsPaused = localStorage.getItem('notificationsPaused') === 'true';
 let lastNotificationTime = 0;
@@ -41,12 +63,111 @@ function canShowNotification() {
   return true;
 }
 
+// ==================== CUSTOM TOAST NOTIFICATIONS ====================
+
+function showToast(title, message, type = 'info', duration = 5000) {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  
+  const icons = {
+    success: '✅',
+    error: '❌',
+    warning: '⚠️',
+    info: 'ℹ️'
+  };
+  
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `
+    <span class="toast-icon">${icons[type] || icons.info}</span>
+    <div class="toast-content">
+      ${title ? `<div class="toast-title">${title}</div>` : ''}
+      <div class="toast-message">${message}</div>
+    </div>
+    <button class="toast-close">×</button>
+  `;
+  
+  container.appendChild(toast);
+  
+  // Close button handler
+  const closeBtn = toast.querySelector('.toast-close');
+  closeBtn.onclick = (e) => {
+    e.stopPropagation();
+    removeToast(toast);
+  };
+  
+  // Click to dismiss
+  toast.onclick = () => removeToast(toast);
+  
+  // Auto remove after duration
+  if (duration > 0) {
+    setTimeout(() => removeToast(toast), duration);
+  }
+  
+  return toast;
+}
+
+function removeToast(toast) {
+  toast.classList.add('removing');
+  setTimeout(() => {
+    if (toast.parentElement) {
+      toast.parentElement.removeChild(toast);
+    }
+  }, 300);
+}
+
+// ==================== CUSTOM CONFIRMATION MODAL ====================
+
+function showConfirm(message, title = 'Confirm Action', confirmText = 'Confirm', cancelText = 'Cancel') {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('confirmModal');
+    const titleEl = document.getElementById('confirmTitle');
+    const messageEl = document.getElementById('confirmMessage');
+    const okBtn = document.getElementById('confirmOk');
+    const cancelBtn = document.getElementById('confirmCancel');
+    
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+    okBtn.textContent = confirmText;
+    cancelBtn.textContent = cancelText;
+    
+    modal.style.display = 'flex';
+    
+    const cleanup = () => {
+      modal.style.display = 'none';
+      okBtn.onclick = null;
+      cancelBtn.onclick = null;
+    };
+    
+    okBtn.onclick = () => {
+      cleanup();
+      resolve(true);
+    };
+    
+    cancelBtn.onclick = () => {
+      cleanup();
+      resolve(false);
+    };
+    
+    // Close on background click
+    modal.onclick = (e) => {
+      if (e.target === modal) {
+        cleanup();
+        resolve(false);
+      }
+    };
+  });
+}
+
 function showNotification(title, body) {
   if (!canShowNotification()) return;
   
+  // Show browser notification
   if (Notification.permission === "granted") {
     new Notification(title, { body });
   }
+  
+  // Also show in-app toast
+  showToast(title, body, 'info', 8000);
 }
 
 function updateNotificationStatus() {
@@ -111,7 +232,7 @@ async function loadActivities() {
 
   const res = await fetch(url);
   if (!res.ok) {
-    alert("Failed to load activities");
+    showToast('Error', 'Failed to load activities', 'error');
     return;
   }
   
@@ -146,7 +267,7 @@ async function loadActivities() {
       <td>${a.title} ${recurringBadge}</td>
       <td>${categoryIcon} ${a.category}</td>
       <td class="${priorityClass}">${prioritySymbol} ${a.priority}</td>
-      <td>${new Date(a.deadline).toLocaleString()}</td>
+      <td>${new Date(a.deadline).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}</td>
       <td>${a.estimated_minutes ? a.estimated_minutes + " min" : "-"}</td>
       <td><span class="badge ${a.status}">${a.status}</span></td>
       <td>
@@ -204,17 +325,17 @@ async function createActivity() {
   const recurrencePattern = document.getElementById("recurrencePattern").value;
 
   if (!title.trim()) {
-    alert("Title is required");
+    showToast('Validation Error', 'Title is required', 'warning');
     return;
   }
 
   if (!localDeadline) {
-    alert("Deadline is required");
+    showToast('Validation Error', 'Deadline is required', 'warning');
     return;
   }
 
   if (isRecurring && !recurrencePattern) {
-    alert("Please select recurrence pattern");
+    showToast('Validation Error', 'Please select recurrence pattern', 'warning');
     return;
   }
 
@@ -237,9 +358,11 @@ async function createActivity() {
 
   if (!res.ok) {
     const error = await res.json();
-    alert("Create failed: " + (error.detail || "Unknown error"));
+    showToast('Create Failed', error.detail || 'Unknown error occurred', 'error');
     return;
   }
+
+  showToast('Success', 'Activity created successfully!', 'success', 3000);
 
   // Clear form
   document.getElementById("title").value = "";
@@ -292,7 +415,7 @@ async function saveEdit() {
   const estimatedMinutes = parseInt(document.getElementById("editEstimatedMinutes").value) || 0;
 
   if (!title.trim()) {
-    alert("Title is required");
+    showToast('Validation Error', 'Title is required', 'warning');
     return;
   }
 
@@ -314,10 +437,11 @@ async function saveEdit() {
 
   if (!res.ok) {
     const error = await res.json();
-    alert("Update failed: " + (error.detail || "Unknown error"));
+    showToast('Update Failed', error.detail || 'Unknown error occurred', 'error');
     return;
   }
 
+  showToast('Success', 'Activity updated successfully!', 'success', 3000);
   closeEditForm();
   loadActivities();
   loadStats();
@@ -327,24 +451,31 @@ async function completeActivity(id) {
   const res = await fetch(`http://127.0.0.1:8000/activities/${id}/complete`, { method: "POST" });
   if (!res.ok) {
     const error = await res.json();
-    alert("Failed to complete: " + (error.detail || "Unknown error"));
+    showToast('Failed', error.detail || 'Failed to complete activity', 'error');
     return;
   }
+  showToast('Success', 'Activity completed!', 'success', 3000);
   loadActivities();
   loadStats();
 }
 
 async function deleteActivity(id) {
-  if (!confirm("Are you sure you want to delete this activity?")) {
-    return;
-  }
+  const confirmed = await showConfirm(
+    'This action cannot be undone. Are you sure you want to delete this activity?',
+    'Delete Activity',
+    'Delete',
+    'Cancel'
+  );
+  
+  if (!confirmed) return;
   
   const res = await fetch(`http://127.0.0.1:8000/activities/${id}`, { method: "DELETE" });
   if (!res.ok) {
     const error = await res.json();
-    alert("Failed to delete: " + (error.detail || "Unknown error"));
+    showToast('Failed', error.detail || 'Failed to delete activity', 'error');
     return;
   }
+  showToast('Success', 'Activity deleted successfully', 'success', 3000);
   loadActivities();
   loadStats();
 }
@@ -356,17 +487,17 @@ async function snoozeActivity(id) {
   const res = await fetch(`http://127.0.0.1:8000/activities/${id}/snooze?minutes=${minutes}`, { method: "POST" });
   if (!res.ok) {
     const error = await res.json();
-    alert("Failed to snooze: " + (error.detail || "Unknown error"));
+    showToast('Failed', error.detail || 'Failed to snooze activity', 'error');
     return;
   }
-  alert(`Activity snoozed for ${minutes} minutes`);
+  showToast('Success', `Activity snoozed for ${minutes} minutes`, 'success', 3000);
   loadActivities();
 }
 
 async function showCalendarView() {
   const res = await fetch("http://127.0.0.1:8000/activities?status=pending&sort_by=deadline&sort_order=asc");
   if (!res.ok) {
-    alert("Failed to load calendar");
+    showToast('Error', 'Failed to load calendar', 'error');
     return;
   }
   
@@ -376,7 +507,7 @@ async function showCalendarView() {
 
   const groupedByDate = {};
   activities.forEach(a => {
-    const date = new Date(a.deadline).toLocaleDateString();
+    const date = new Date(a.deadline).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
     if (!groupedByDate[date]) groupedByDate[date] = [];
     groupedByDate[date].push(a);
   });
@@ -394,7 +525,7 @@ async function showCalendarView() {
     acts.forEach(a => {
       const prioritySymbol = a.priority === "high" ? "🔴" : a.priority === "medium" ? "🟡" : "🟢";
       const categoryIcon = categoryIcons[a.category] || "📌";
-      const time = new Date(a.deadline).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      const time = new Date(a.deadline).toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit', hour12: true});
       
       const actDiv = document.createElement("div");
       actDiv.style.padding = "8px";
@@ -422,7 +553,7 @@ async function openNotesView(activityId) {
   
   const res = await fetch(`http://127.0.0.1:8000/activities/${activityId}/notes`);
   if (!res.ok) {
-    alert("Failed to load notes");
+    showToast('Error', 'Failed to load notes', 'error');
     return;
   }
   
@@ -463,7 +594,7 @@ async function addNote() {
   const note = document.getElementById("newNote").value;
 
   if (!note.trim()) {
-    alert("Note cannot be empty");
+    showToast('Validation Error', 'Note cannot be empty', 'warning');
     return;
   }
 
@@ -475,10 +606,11 @@ async function addNote() {
 
   if (!res.ok) {
     const error = await res.json();
-    alert("Failed to add note: " + (error.detail || "Unknown error"));
+    showToast('Failed', error.detail || 'Failed to add note', 'error');
     return;
   }
 
+  showToast('Success', 'Note added successfully', 'success', 2000);
   document.getElementById("newNote").value = "";
   openNotesView(activityId); // Reload notes
 }
@@ -493,6 +625,25 @@ source.onmessage = function(event) {
   loadActivities();
 };
 
+// Update current time display
+function updateCurrentTime() {
+  const timeEl = document.getElementById('currentTime');
+  if (timeEl) {
+    const now = new Date();
+    const timeStr = now.toLocaleString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZoneName: 'short'
+    });
+    timeEl.textContent = `🕐 ${timeStr}`;
+  }
+}
+
+// Update time every minute
+updateCurrentTime();
+setInterval(updateCurrentTime, 60000);
+
 updateNotificationStatus();
 loadActivities();
 loadStats();
@@ -500,7 +651,7 @@ loadStats();
 // Export activities
 async function exportData() {
   try {
-    const response = await fetch('/export');
+    const response = await fetch('http://127.0.0.1:8000/export');
     if (response.ok) {
       const data = await response.json();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -513,7 +664,7 @@ async function exportData() {
     }
   } catch (error) {
     console.error('Export failed:', error);
-    alert('Failed to export data');
+    showToast('Failed', 'Failed to export data', 'error');
   }
 }
 
@@ -526,7 +677,7 @@ async function importData(event) {
     const text = await file.text();
     const data = JSON.parse(text);
     
-    const response = await fetch('/import', {
+    const response = await fetch('http://127.0.0.1:8000/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -534,14 +685,14 @@ async function importData(event) {
 
     if (response.ok) {
       const result = await response.json();
-      alert(result.message);
+      showToast('Success', result.message || 'Data imported successfully', 'success');
       loadActivities();
     } else {
-      alert('Import failed');
+      showToast('Failed', 'Import failed', 'error');
     }
   } catch (error) {
     console.error('Import failed:', error);
-    alert('Failed to import data: ' + error.message);
+    showToast('Failed', 'Failed to import data: ' + error.message, 'error');
   }
   
   // Reset file input
@@ -618,7 +769,7 @@ async function showStatsModal() {
     }
   } catch (error) {
     console.error('Failed to load stats:', error);
-    alert('Failed to load statistics');
+    showToast('Failed', 'Failed to load statistics', 'error');
   }
 }
 
@@ -669,11 +820,18 @@ function selectAllActivities() {
 async function batchCompleteSelected() {
   const ids = getSelectedIds();
   if (ids.length === 0) {
-    alert('No activities selected');
+    showToast('Warning', 'No activities selected', 'warning');
     return;
   }
   
-  if (!confirm(`Complete ${ids.length} activities?`)) return;
+  const confirmed = await showConfirm(
+    `Complete ${ids.length} selected activities?`,
+    'Batch Complete',
+    'Complete All',
+    'Cancel'
+  );
+  
+  if (!confirmed) return;
   
   const res = await fetch('http://127.0.0.1:8000/activities/batch/complete', {
     method: 'POST',
@@ -683,21 +841,28 @@ async function batchCompleteSelected() {
   
   if (res.ok) {
     const result = await res.json();
-    alert(result.message);
+    showToast('Success', result.message || 'Activities completed', 'success');
     loadActivities();
   } else {
-    alert('Batch complete failed');
+    showToast('Failed', 'Batch complete failed', 'error');
   }
 }
 
 async function batchDeleteSelected() {
   const ids = getSelectedIds();
   if (ids.length === 0) {
-    alert('No activities selected');
+    showToast('Warning', 'No activities selected', 'warning');
     return;
   }
   
-  if (!confirm(`Delete ${ids.length} activities? This cannot be undone.`)) return;
+  const confirmed = await showConfirm(
+    `Delete ${ids.length} selected activities? This action cannot be undone.`,
+    'Batch Delete',
+    'Delete All',
+    'Cancel'
+  );
+  
+  if (!confirmed) return;
   
   const res = await fetch('http://127.0.0.1:8000/activities/batch/delete', {
     method: 'POST',
@@ -707,23 +872,23 @@ async function batchDeleteSelected() {
   
   if (res.ok) {
     const result = await res.json();
-    alert(result.message);
+    showToast('Success', result.message || 'Activities deleted', 'success');
     loadActivities();
   } else {
-    alert('Batch delete failed');
+    showToast('Failed', 'Batch delete failed', 'error');
   }
 }
 
 async function batchUpdateCategory() {
   const category = document.getElementById('batchCategory').value;
   if (!category) {
-    alert('Please select a category');
+    showToast('Warning', 'Please select a category', 'warning');
     return;
   }
   
   const ids = getSelectedIds();
   if (ids.length === 0) {
-    alert('No activities selected');
+    showToast('Warning', 'No activities selected', 'warning');
     return;
   }
   
@@ -735,11 +900,11 @@ async function batchUpdateCategory() {
   
   if (res.ok) {
     const result = await res.json();
-    alert(result.message);
+    showToast('Success', result.message || 'Categories updated', 'success');
     loadActivities();
     document.getElementById('batchCategory').value = '';
   } else {
-    alert('Batch update failed');
+    showToast('Failed', 'Batch update failed', 'error');
   }
 }
 
@@ -755,7 +920,7 @@ async function openSubtasksView(activityId) {
   
   const res = await fetch(`http://127.0.0.1:8000/activities/${activityId}/subtasks`);
   if (!res.ok) {
-    alert('Failed to load subtasks');
+    showToast('Error', 'Failed to load subtasks', 'error');
     return;
   }
   
@@ -789,7 +954,7 @@ async function addSubtask() {
   const title = document.getElementById('newSubtask').value;
   
   if (!title.trim()) {
-    alert('Subtask title is required');
+    showToast('Validation Error', 'Subtask title is required', 'warning');
     return;
   }
   
@@ -803,7 +968,7 @@ async function addSubtask() {
     document.getElementById('newSubtask').value = '';
     openSubtasksView(activityId);
   } else {
-    alert('Failed to add subtask');
+    showToast('Error', 'Failed to add subtask', 'error');
   }
 }
 
@@ -815,19 +980,25 @@ async function toggleSubtask(subtaskId, isCompleted) {
   });
   
   if (!res.ok) {
-    alert('Failed to update subtask');
+    showToast('Error', 'Failed to update subtask', 'error');
   }
 }
 
 async function deleteSubtask(subtaskId) {
-  if (!confirm('Delete this subtask?')) return;
+  const confirmed = await showConfirm(
+    'Delete this subtask?',
+    'Delete Subtask',
+    'Delete',
+    'Cancel'
+  );
+  if (!confirmed) return;
   
   const res = await fetch(`http://127.0.0.1:8000/subtasks/${subtaskId}`, { method: 'DELETE' });
   if (res.ok) {
     const activityId = document.getElementById('currentSubtaskActivityId').value;
     openSubtasksView(activityId);
   } else {
-    alert('Failed to delete subtask');
+    showToast('Error', 'Failed to delete subtask', 'error');
   }
 }
 
@@ -836,7 +1007,7 @@ async function deleteSubtask(subtaskId) {
 async function openTemplatesView() {
   const res = await fetch('http://127.0.0.1:8000/templates');
   if (!res.ok) {
-    alert('Failed to load templates');
+    showToast('Error', 'Failed to load templates', 'error');
     return;
   }
   
@@ -875,7 +1046,7 @@ async function createTemplate() {
   const description = document.getElementById('templateDescription').value;
   
   if (!name.trim() || !title.trim()) {
-    alert('Template name and title are required');
+    showToast('Validation Error', 'Template name and title are required', 'warning');
     return;
   }
   
@@ -897,7 +1068,7 @@ async function createTemplate() {
     document.getElementById('templateDescription').value = '';
     openTemplatesView();
   } else {
-    alert('Failed to create template');
+    showToast('Error', 'Failed to create template', 'error');
   }
 }
 
@@ -915,18 +1086,24 @@ async function useTemplate(templateId) {
     closeTemplatesView();
     loadActivities();
   } else {
-    alert('Failed to create activity from template');
+    showToast('Error', 'Failed to create activity from template', 'error');
   }
 }
 
 async function deleteTemplate(templateId) {
-  if (!confirm('Delete this template?')) return;
+  const confirmed = await showConfirm(
+    'Delete this template?',
+    'Delete Template',
+    'Delete',
+    'Cancel'
+  );
+  if (!confirmed) return;
   
   const res = await fetch(`http://127.0.0.1:8000/templates/${templateId}`, { method: 'DELETE' });
   if (res.ok) {
     openTemplatesView();
   } else {
-    alert('Failed to delete template');
+    showToast('Error', 'Failed to delete template', 'error');
   }
 }
 
@@ -937,7 +1114,7 @@ async function openHistoryView(activityId) {
   
   const res = await fetch(`http://127.0.0.1:8000/activities/${activityId}/history`);
   if (!res.ok) {
-    alert('Failed to load history');
+    showToast('Error', 'Failed to load history', 'error');
     return;
   }
   
@@ -989,7 +1166,7 @@ async function openAttachmentsView(activityId) {
   
   const res = await fetch(`http://127.0.0.1:8000/activities/${activityId}/attachments`);
   if (!res.ok) {
-    alert('Failed to load attachments');
+    showToast('Error', 'Failed to load attachments', 'error');
     return;
   }
   
@@ -1035,7 +1212,7 @@ async function uploadAttachment() {
   const fileInput = document.getElementById('attachmentFile');
   
   if (!fileInput.files || fileInput.files.length === 0) {
-    alert('Please select a file');
+    showToast('Validation Error', 'Please select a file', 'warning');
     return;
   }
   
@@ -1054,11 +1231,11 @@ async function uploadAttachment() {
       openAttachmentsView(activityId);
     } else {
       const error = await res.json();
-      alert('Upload failed: ' + (error.detail || 'Unknown error'));
+      showToast('Error', error.detail || 'Upload failed', 'error');
     }
   } catch (error) {
     console.error('Upload error:', error);
-    alert('Upload failed: ' + error.message);
+    showToast('Error', 'Upload failed: ' + error.message, 'error');
   }
 }
 
@@ -1074,24 +1251,55 @@ async function downloadAttachment(attachmentId, filename) {
       a.click();
       URL.revokeObjectURL(url);
     } else {
-      alert('Download failed');
+      showToast('Error', 'Download failed', 'error');
     }
   } catch (error) {
     console.error('Download error:', error);
-    alert('Download failed');
+    showToast('Error', 'Download failed', 'error');
   }
 }
 
 async function deleteAttachment(attachmentId) {
-  if (!confirm('Delete this attachment?')) return;
+  const confirmed = await showConfirm(
+    'Delete this attachment?',
+    'Delete Attachment',
+    'Delete',
+    'Cancel'
+  );
+  if (!confirmed) return;
   
   const res = await fetch(`http://127.0.0.1:8000/attachments/${attachmentId}`, { method: 'DELETE' });
   if (res.ok) {
     const activityId = document.getElementById('currentAttachmentActivityId').value;
     openAttachmentsView(activityId);
   } else {
-    alert('Failed to delete attachment');
+    showToast('Error', 'Failed to delete attachment', 'error');
   }
 }
 
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+  // Enable/disable recurrence pattern based on checkbox
+  const isRecurringCheckbox = document.getElementById('isRecurring');
+  if (isRecurringCheckbox) {
+    isRecurringCheckbox.addEventListener('change', function() {
+      const recurrencePattern = document.getElementById('recurrencePattern');
+      if (recurrencePattern) {
+        recurrencePattern.disabled = !this.checked;
+        if (!this.checked) {
+          recurrencePattern.value = '';
+        }
+      }
+    });
+  }
+  
+  // Initialize app
+  updateNotificationStatus();
+  loadActivities();
+  loadStats();
+  updateStreakDisplay();
+});
+
+// Auto-refresh activities every 30 seconds
 setInterval(loadActivities, 30000);
+

@@ -10,6 +10,7 @@ def check_missed_activities():
     db = SessionLocal()
     now = datetime.now(timezone.utc)
 
+
     activities = db.query(Activity).filter(
         Activity.status == "pending"
     ).all()
@@ -31,6 +32,7 @@ scheduler.add_job(check_missed_activities, "interval", minutes=1)
 def check_due_soon():
     db = SessionLocal()
     now = datetime.now(timezone.utc)
+
 
     activities = db.query(Activity).filter(
         Activity.status == "pending",

@@ -12,6 +12,7 @@
 <div class="header">
   <h1>📊 Accountability System</h1>
   <div class="header-controls">
+    <span id="currentTime" style="font-size:14px;color:var(--text);margin-right:10px;"></span>
     <span id="notificationStatus" style="font-weight:bold;"></span>
     <button id="toggleNotifications" class="toggle-btn" onclick="toggleNotifications()">Pause Notifications</button>
     <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark Mode">🌓</button>
@@ -287,6 +288,21 @@
   <div style="display: flex; gap: 10px; margin-top: 10px;">
     <button onclick="uploadAttachment()">Upload</button>
     <button onclick="closeAttachmentsView()">Close</button>
+  </div>
+</div>
+
+<!-- Custom Toast Notification -->
+<div id="toastContainer" style="position: fixed; top: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 10px;"></div>
+
+<!-- Custom Confirmation Modal -->
+<div id="confirmModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center;">
+  <div style="background: var(--card-bg); padding: 30px; border-radius: 12px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+    <h3 id="confirmTitle" style="margin: 0 0 15px 0; color: var(--text); font-size: 20px;">Confirm Action</h3>
+    <p id="confirmMessage" style="margin: 0 0 25px 0; color: var(--text); font-size: 16px; line-height: 1.5;"></p>
+    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+      <button id="confirmCancel" style="background: #6b7280; padding: 10px 20px;">Cancel</button>
+      <button id="confirmOk" style="background: #ef4444; padding: 10px 20px;">Confirm</button>
+    </div>
   </div>
 </div>
 
