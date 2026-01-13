@@ -339,7 +339,9 @@ async function createActivity() {
     return;
   }
 
-  const utcDeadline = new Date(localDeadline).toISOString();
+  // Preserve local time by adding timezone offset to create correct UTC time
+  const localDate = new Date(localDeadline);
+  const utcDeadline = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
   
   const res = await fetch("http://127.0.0.1:8000/activities", {
     method: "POST",
@@ -419,7 +421,9 @@ async function saveEdit() {
     return;
   }
 
-  const utcDeadline = new Date(localDeadline).toISOString();
+  // Preserve local time by adding timezone offset to create correct UTC time
+  const localDate = new Date(localDeadline);
+  const utcDeadline = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
   
   const res = await fetch(`http://127.0.0.1:8000/activities/${id}`, {
     method: "PUT",
