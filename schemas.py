@@ -4,7 +4,7 @@ from typing import Optional
 
 class UserRegister(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6)
+    password: str
 
 class UserLogin(BaseModel):
     email: EmailStr

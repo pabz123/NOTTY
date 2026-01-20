@@ -7,6 +7,7 @@ class Activity(Base):
     __tablename__ = "activities"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String, nullable=False)
     description = Column(String, nullable=True)
     deadline = Column(DateTime, nullable=False)
@@ -52,6 +53,7 @@ class ActivityTemplate(Base):
     __tablename__ = "activity_templates"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String, nullable=False)
     title_template = Column(String, nullable=False)
     description_template = Column(Text, nullable=True)

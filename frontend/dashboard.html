@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Accountability System - Dashboard</title>
+<link rel="stylesheet" href="dashboard-styles.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- Login/Register Screen -->
+<div id="authScreen" class="auth-screen">
+  <div class="auth-container">
+    <div class="auth-card">
+      <h1 class="auth-logo">📊 Accountability System</h1>
+      <p class="auth-subtitle">Track your progress, achieve your goals</p>
+      
+      <div id="loginForm" class="auth-form">
+        <h2>Welcome Back</h2>
+        <input type="email" id="loginEmail" placeholder="Email" required>
+        <input type="password" id="loginPassword" placeholder="Password" required>
+        <button onclick="login()" class="btn-primary">Sign In</button>
+        <p class="auth-toggle">Don't have an account? <a onclick="showRegister()">Register</a></p>
+      </div>
+      
+      <div id="registerForm" class="auth-form" style="display:none;">
+        <h2>Create Account</h2>
+        <input type="email" id="registerEmail" placeholder="Email" required>
+        <input type="password" id="registerPassword" placeholder="Password" required maxlength="50">
+        <input type="password" id="registerConfirm" placeholder="Confirm Password" required maxlength="50">
+        <button onclick="register()" class="btn-primary">Create Account</button>
+        <p class="auth-toggle">Already have an account? <a onclick="showLogin()">Sign In</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main Dashboard (hidden until logged in) -->
+<div id="mainApp" class="main-app" style="display:none;">
+  
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h2>📊 Accountability</h2>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-view="dashboard">
+        <span class="nav-icon">📈</span>
+        <span>Dashboard</span>
+      </a>
+      <a href="#" class="nav-item" data-view="activities">
+        <span class="nav-icon">📋</span>
+        <span>Activities</span>
+      </a>
+      <a href="#" class="nav-item" data-view="analytics">
+        <span class="nav-icon">📊</span>
+        <span>Analytics</span>
+      </a>
+      <a href="#" class="nav-item" data-view="templates">
+        <span class="nav-icon">📝</span>
+        <span>Templates</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <button onclick="toggleTheme()" class="btn-icon" title="Toggle Theme">🌓</button>
+      <button onclick="logout()" class="btn-icon" title="Logout">🚪</button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    
+    <!-- Dashboard View -->
+    <div id="dashboardView" class="view active-view">
+      <header class="view-header">
+        <h1>Dashboard</h1>
+        <div class="header-actions">
+          <span id="currentTime" class="header-time"></span>
+          <button onclick="showCreateModal()" class="btn-primary">+ New Activity</button>
+        </div>
+      </header>
+
+      <!-- Stats Cards -->
+      <div class="stats-grid">
+        <div class="stat-card pending-card">
+          <div class="stat-icon">⏳</div>
+          <div class="stat-content">
+            <div class="stat-value" id="statPending">0</div>
+            <div class="stat-label">Pending</div>
+          </div>
+        </div>
+        <div class="stat-card missed-card">
+          <div class="stat-icon">❌</div>
+          <div class="stat-content">
+            <div class="stat-value" id="statMissed">0</div>
+            <div class="stat-label">Missed</div>
+          </div>
+        </div>
+        <div class="stat-card completed-card">
+          <div class="stat-icon">✅</div>
+          <div class="stat-content">
+            <div class="stat-value" id="statCompleted">0</div>
+            <div class="stat-label">Completed</div>
+          </div>
+        </div>
+        <div class="stat-card streak-card">
+          <div class="stat-icon">🔥</div>
+          <div class="stat-content">
+            <div class="stat-value" id="statStreak">0</div>
+            <div class="stat-label">Day Streak</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="charts-row">
+        <div class="chart-card">
+          <h3>Category Distribution</h3>
+          <canvas id="categoryChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Priority Breakdown</h3>
+          <canvas id="priorityChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Recent Activities -->
+      <div class="content-card">
+        <h3>Recent Activities</h3>
+        <div id="recentActivities" class="activities-list"></div>
+      </div>
+    </div>
+
+    <!-- Activities View -->
+    <div id="activitiesView" class="view">
+      <header class="view-header">
+        <h1>All Activities</h1>
+        <div class="header-actions">
+          <input type="text" id="searchInput" placeholder="Search..." class="search-input">
+          <button onclick="showFilterPanel()" class="btn-secondary">🔍 Filters</button>
+          <button onclick="showCreateModal()" class="btn-primary">+ New Activity</button>
+        </div>
+      </header>
+
+      <!-- Filter Panel -->
+      <div id="filterPanel" class="filter-panel" style="display:none;">
+        <select id="statusFilter" onchange="loadActivities()">
+          <option value="">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="missed">Missed</option>
+          <option value="completed">Completed</option>
+        </select>
+        <select id="priorityFilter" onchange="loadActivities()">
+          <option value="">All Priority</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        <select id="categoryFilter" onchange="loadActivities()">
+          <option value="">All Categories</option>
+          <option value="general">General</option>
+          <option value="work">Work</option>
+          <option value="personal">Personal</option>
+          <option value="health">Health</option>
+          <option value="finance">Finance</option>
+          <option value="education">Education</option>
+        </select>
+      </div>
+
+      <!-- Activities Grid -->
+      <div id="activitiesGrid" class="activities-grid"></div>
+    </div>
+
+    <!-- Analytics View -->
+    <div id="analyticsView" class="view">
+      <header class="view-header">
+        <h1>Analytics</h1>
+      </header>
+      <div class="charts-row">
+        <div class="chart-card">
+          <h3>Completion Trend</h3>
+          <canvas id="trendChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Performance Metrics</h3>
+          <div id="metricsContent" class="metrics-content"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Templates View -->
+    <div id="templatesView" class="view">
+      <header class="view-header">
+        <h1>Activity Templates</h1>
+        <button onclick="showCreateTemplateModal()" class="btn-primary">+ New Template</button>
+      </header>
+      <div id="templatesGrid" class="templates-grid"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Create Activity Modal -->
+<div id="createModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Create New Activity</h2>
+      <button onclick="closeModal('createModal')" class="btn-close">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="text" id="activityTitle" placeholder="Title" required>
+      <textarea id="activityDescription" placeholder="Description" rows="3"></textarea>
+      <input type="datetime-local" id="activityDeadline" required>
+      <select id="activityPriority">
+        <option value="medium">Medium Priority</option>
+        <option value="high">High Priority</option>
+        <option value="low">Low Priority</option>
+      </select>
+      <select id="activityCategory">
+        <option value="general">General</option>
+        <option value="work">Work</option>
+        <option value="personal">Personal</option>
+        <option value="health">Health</option>
+        <option value="finance">Finance</option>
+        <option value="education">Education</option>
+      </select>
+      <input type="number" id="activityNotifyMinutes" placeholder="Notify before (minutes)" value="30" min="5">
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal('createModal')" class="btn-secondary">Cancel</button>
+      <button onclick="createActivity()" class="btn-primary">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toastContainer" class="toast-container"></div>
+
+<script src="dashboard.js"></script>
+</body>
+</html>

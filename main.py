@@ -13,7 +13,7 @@ from models import Base, Activity, User, ActivityNote, Subtask, ActivityTemplate
 from schemas import ActivityCreate, ActivityResponse, ActivityUpdate, UserRegister, UserLogin, Token, UserResponse, ActivityNoteCreate, ActivityNoteResponse, SubtaskCreate, SubtaskUpdate, SubtaskResponse, TemplateCreate, TemplateResponse, ActivityHistoryResponse, AttachmentResponse
 from fastapi.responses import StreamingResponse
 import asyncio
-from events import subscribers
+from events import subscribers, broadcast
 from config import settings
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -117,8 +117,12 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @app.post("/activities", response_model=ActivityResponse)
 @limiter.limit(f"{settings.rate_limit_per_minute}/minute")
-def create_activity(request: Request, activity: ActivityCreate, db: Session = Depends(get_db)):
- 
+def create_activity(
+    request: Request, 
+    activity: ActivityCreate, 
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     try:
         # Validation
         if not activity.title or not activity.title.strip():
@@ -141,6 +145,7 @@ def create_activity(request: Request, activity: ActivityCreate, db: Session = De
             raise HTTPException(status_code=400, detail="Deadline cannot be in the past")
         
         new_activity = Activity(
+            user_id=current_user.id,
             title=activity.title.strip(),
             description=activity.description.strip() if activity.description else None,
             deadline=activity_deadline,
@@ -162,7 +167,8 @@ def create_activity(request: Request, activity: ActivityCreate, db: Session = De
         
         broadcast({
             "type": "created",
-            "title": new_activity.title
+            "title": new_activity.title,
+            "user_id": current_user.id
         })
 
         return new_activity
@@ -184,10 +190,12 @@ def list_activities(
     sort_order: str = Query("asc", description="Sort order: asc, desc"),
     page: int = Query(1, ge=1, description="Page number (starts at 1)"),
     page_size: int = Query(50, ge=1, le=100, description="Items per page (max 100)"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     try:
-        query = db.query(Activity)
+        # Filter by user_id
+        query = db.query(Activity).filter(Activity.user_id == current_user.id)
         
         # Filtering
         if status:
@@ -235,21 +243,31 @@ def list_activities(
         raise HTTPException(status_code=500, detail=f"Failed to fetch activities: {str(e)}")
 
 @app.put("/activities/{activity_id}", response_model=ActivityResponse)
-def update_activity(activity_id: int, activity_update: ActivityUpdate, db: Session = Depends(get_db)):
+def update_activity(activity_id: int, activity_update: ActivityUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         activity = db.query(Activity).filter(Activity.id == activity_id).first()
         
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
         
+        if activity.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to update this activity")
+        
+        # Track changes for history logging
+        changes = []
+        
         # Update only provided fields
         if activity_update.title is not None:
             if not activity_update.title.strip():
                 raise HTTPException(status_code=400, detail="Title cannot be empty")
+            old_title = activity.title
             activity.title = activity_update.title.strip()
+            changes.append(("title", old_title, activity.title))
         
         if activity_update.description is not None:
+            old_desc = activity.description
             activity.description = activity_update.description.strip() if activity_update.description else None
+            changes.append(("description", old_desc, activity.description))
         
         if activity_update.deadline is not None:
             # Check if new deadline is in the past
@@ -258,43 +276,62 @@ def update_activity(activity_id: int, activity_update: ActivityUpdate, db: Sessi
 
             if new_deadline < now:
                 raise HTTPException(status_code=400, detail="Deadline cannot be in the past")
+            old_deadline = str(activity.deadline)
             activity.deadline = new_deadline
+            changes.append(("deadline", old_deadline, str(activity.deadline)))
         
         if activity_update.priority is not None:
             if activity_update.priority not in ["low", "medium", "high"]:
                 raise HTTPException(status_code=400, detail="Priority must be low, medium, or high")
+            old_priority = activity.priority
             activity.priority = activity_update.priority
+            changes.append(("priority", old_priority, activity.priority))
         
         if activity_update.category is not None:
             if activity_update.category not in ["general", "work", "personal", "health", "finance", "education", "other"]:
                 raise HTTPException(status_code=400, detail="Invalid category")
+            old_category = activity.category
             activity.category = activity_update.category
+            changes.append(("category", old_category, activity.category))
         
         if activity_update.notification_minutes is not None:
             if activity_update.notification_minutes < 5 or activity_update.notification_minutes > 1440:
                 raise HTTPException(status_code=400, detail="Notification minutes must be between 5 and 1440")
+            old_notify = activity.notification_minutes
             activity.notification_minutes = activity_update.notification_minutes
+            changes.append(("notification_minutes", str(old_notify), str(activity.notification_minutes)))
         
         if activity_update.is_recurring is not None:
+            old_recurring = activity.is_recurring
             activity.is_recurring = activity_update.is_recurring
+            changes.append(("is_recurring", str(old_recurring), str(activity.is_recurring)))
         
         if activity_update.recurrence_pattern is not None:
             if activity_update.recurrence_pattern and activity_update.recurrence_pattern not in ["daily", "weekly", "monthly"]:
                 raise HTTPException(status_code=400, detail="Recurrence pattern must be daily, weekly, or monthly")
+            old_pattern = activity.recurrence_pattern
             activity.recurrence_pattern = activity_update.recurrence_pattern
+            changes.append(("recurrence_pattern", old_pattern, activity.recurrence_pattern))
         
         if activity_update.estimated_minutes is not None:
+            old_est = activity.estimated_minutes
             activity.estimated_minutes = activity_update.estimated_minutes
+            changes.append(("estimated_minutes", str(old_est) if old_est else None, str(activity.estimated_minutes)))
         
         if activity_update.actual_minutes is not None:
+            old_actual = activity.actual_minutes
             activity.actual_minutes = activity_update.actual_minutes
+            changes.append(("actual_minutes", str(old_actual) if old_actual else None, str(activity.actual_minutes)))
         
         db.commit()
         db.refresh(activity)
         
-        # Log history for significant changes
-        if activity_update.title or activity_update.deadline or activity_update.priority or activity_update.category:
-            log_activity_history(db, activity_id, "updated", None, None, None)
+        # Log history for each field change
+        for field_name, old_value, new_value in changes:
+            log_activity_history(db, activity_id, "updated", field_name, old_value, new_value)
+        
+        if changes:
+            db.commit()  # Commit history entries
         
         broadcast({
             "type": "updated",
@@ -316,24 +353,24 @@ def start_scheduler():
     
 
 
-def broadcast(event: dict):
-    message = json.dumps(event)
-    for q in subscribers:
-        q.put_nowait(message)
+
 
 
     
 @app.get("/activities/missed", response_model=list[ActivityResponse])
-def get_missed_activities(db: Session = Depends(get_db)):
-    return db.query(Activity).filter(Activity.status == "missed").all()
+def get_missed_activities(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return db.query(Activity).filter(Activity.user_id == current_user.id, Activity.status == "missed").all()
 
 @app.post("/activities/{activity_id}/complete", response_model=ActivityResponse)
-def complete_activity(activity_id: int, db: Session = Depends(get_db)):
+def complete_activity(activity_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         activity = db.query(Activity).filter(Activity.id == activity_id).first()
 
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
+        
+        if activity.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to complete this activity")
 
         activity.status = "completed"
         activity.completed_at = datetime.utcnow()
@@ -354,6 +391,7 @@ def complete_activity(activity_id: int, db: Session = Depends(get_db)):
                 next_deadline = activity.deadline + timedelta(days=30)
             
             new_activity = Activity(
+                user_id=current_user.id,
                 title=activity.title,
                 description=activity.description,
                 deadline=next_deadline,
@@ -382,23 +420,38 @@ def complete_activity(activity_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to complete activity: {str(e)}")
 
 @app.post("/activities/{activity_id}/snooze", response_model=ActivityResponse)
-def snooze_activity(activity_id: int, minutes: int = Query(30, description="Minutes to snooze"), db: Session = Depends(get_db)):
+def snooze_activity(activity_id: int, minutes: int = Query(30, description="Minutes to snooze"), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         activity = db.query(Activity).filter(Activity.id == activity_id).first()
 
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
         
+        if activity.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to snooze this activity")
+        
         from datetime import timedelta
+        old_snooze = activity.snoozed_until
         activity.snoozed_until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
         activity.reminded = False  # Reset reminder so it can notify again
+        
+        # Log snooze action
+        log_activity_history(
+            db, 
+            activity_id, 
+            "snoozed", 
+            "snoozed_until",
+            str(old_snooze) if old_snooze else None,
+            str(activity.snoozed_until)
+        )
         
         db.commit()
         db.refresh(activity)
         
         broadcast({
             "type": "snoozed",
-            "title": activity.title
+            "title": activity.title,
+            "minutes": minutes
         })
 
         return activity
@@ -410,11 +463,14 @@ def snooze_activity(activity_id: int, minutes: int = Query(30, description="Minu
 
 # Activity Notes Endpoints
 @app.post("/activities/{activity_id}/notes", response_model=ActivityNoteResponse)
-def add_activity_note(activity_id: int, note_data: ActivityNoteCreate, db: Session = Depends(get_db)):
+def add_activity_note(activity_id: int, note_data: ActivityNoteCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         activity = db.query(Activity).filter(Activity.id == activity_id).first()
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
+        
+        if activity.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to add notes to this activity")
         
         new_note = ActivityNote(
             activity_id=activity_id,
@@ -433,11 +489,14 @@ def add_activity_note(activity_id: int, note_data: ActivityNoteCreate, db: Sessi
         raise HTTPException(status_code=500, detail=f"Failed to add note: {str(e)}")
 
 @app.get("/activities/{activity_id}/notes", response_model=list[ActivityNoteResponse])
-def get_activity_notes(activity_id: int, db: Session = Depends(get_db)):
+def get_activity_notes(activity_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         activity = db.query(Activity).filter(Activity.id == activity_id).first()
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
+        
+        if activity.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to view notes for this activity")
         
         notes = db.query(ActivityNote).filter(ActivityNote.activity_id == activity_id).order_by(ActivityNote.created_at.desc()).all()
         return notes
@@ -454,8 +513,9 @@ def get_activity_notes(activity_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to complete activity: {str(e)}")
 
 @app.get("/achievements")
-def get_achievements(db: Session = Depends(get_db)):
+def get_achievements(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     completed_count = db.query(Activity).filter(
+        Activity.user_id == current_user.id,
         Activity.status == "completed"
     ).count()
 
@@ -476,7 +536,7 @@ def get_achievements(db: Session = Depends(get_db)):
         achievements.append({"id": "legend", "title": "👑 Legendary", "description": "Completed 100 activities"})
     
     # Category-specific achievements
-    categories = db.query(Activity.category).filter(Activity.status == "completed").distinct().all()
+    categories = db.query(Activity.category).filter(Activity.user_id == current_user.id, Activity.status == "completed").distinct().all()
     if len(categories) >= 5:
         achievements.append({"id": "diverse", "title": "🌈 Well-Rounded", "description": "Completed tasks in 5+ categories"})
 
@@ -487,8 +547,9 @@ def get_achievements(db: Session = Depends(get_db)):
     }
 
 @app.get("/goal-status")
-def goal_status(db: Session = Depends(get_db)):
+def goal_status(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     completed = db.query(Activity).filter(
+        Activity.user_id == current_user.id,
         Activity.status == "completed"
     ).count()
 
@@ -500,14 +561,14 @@ def goal_status(db: Session = Depends(get_db)):
         "reached": completed >= goal
     }
 @app.get("/stats")
-def get_stats(db: Session = Depends(get_db)):
+def get_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     from sqlalchemy import func, case
     from datetime import timedelta
     
-    total = db.query(Activity).count()
-    completed = db.query(Activity).filter(Activity.status == "completed").count()
-    missed = db.query(Activity).filter(Activity.status == "missed").count()
-    pending = db.query(Activity).filter(Activity.status == "pending").count()
+    total = db.query(Activity).filter(Activity.user_id == current_user.id).count()
+    completed = db.query(Activity).filter(Activity.user_id == current_user.id, Activity.status == "completed").count()
+    missed = db.query(Activity).filter(Activity.user_id == current_user.id, Activity.status == "missed").count()
+    pending = db.query(Activity).filter(Activity.user_id == current_user.id, Activity.status == "pending").count()
 
     goal_reached = completed >= 5
     
@@ -519,17 +580,18 @@ def get_stats(db: Session = Depends(get_db)):
         Activity.category,
         func.count(Activity.id).label('total'),
         func.sum(case((Activity.status == 'completed', 1), else_=0)).label('completed')
-    ).group_by(Activity.category).all()
+    ).filter(Activity.user_id == current_user.id).group_by(Activity.category).all()
     
     # Priority breakdown
     priority_stats = db.query(
         Activity.priority,
         func.count(Activity.id).label('total'),
         func.sum(case((Activity.status == 'completed', 1), else_=0)).label('completed')
-    ).group_by(Activity.priority).all()
+    ).filter(Activity.user_id == current_user.id).group_by(Activity.priority).all()
     
     # Streak calculation
     completed_activities = db.query(Activity).filter(
+        Activity.user_id == current_user.id,
         Activity.status == "completed",
         Activity.completed_at.isnot(None)
     ).order_by(Activity.completed_at.desc()).all()
@@ -570,11 +632,18 @@ def get_stats(db: Session = Depends(get_db)):
         "priority_breakdown": [{"priority": pri, "total": tot, "completed": comp or 0} for pri, tot, comp in priority_stats]
     }
 @app.delete("/activities/{activity_id}")
-def delete_activity(activity_id: int, db: Session = Depends(get_db)):
+def delete_activity(activity_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         activity = db.query(Activity).get(activity_id)
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
+        
+        if activity.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this activity")
+        
+        # Log deletion before deleting
+        log_activity_history(db, activity_id, "deleted", None, None, None)
+        db.commit()  # Commit history entry before deletion
         
         broadcast({
             "type": "deleted",
@@ -594,26 +663,34 @@ def delete_activity(activity_id: int, db: Session = Depends(get_db)):
 
 @app.get("/events")
 async def event_stream():
-    queue = asyncio.Queue()
+    """Server-Sent Events endpoint for real-time notifications."""
+    queue = asyncio.Queue(maxsize=100)
     subscribers.append(queue)
 
     async def generator():
         try:
+            # Send initial connection confirmation
+            yield f"data: {json.dumps({'type': 'connected', 'message': 'SSE connection established'})}\n\n"
+            
             while True:
                 event = await queue.get()
+                # Event is already JSON stringified from broadcast/notify
                 yield f"data: {event}\n\n"
+        except asyncio.CancelledError:
+            pass
         finally:
-            subscribers.remove(queue)
+            if queue in subscribers:
+                subscribers.remove(queue)
 
     return StreamingResponse(generator(), media_type="text/event-stream")
 
 @app.get("/export")
-def export_activities(db: Session = Depends(get_db)):
+def export_activities(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     from fastapi.responses import JSONResponse
     import json
     
     try:
-        activities = db.query(Activity).all()
+        activities = db.query(Activity).filter(Activity.user_id == current_user.id).all()
         
         export_data = {
             "export_date": datetime.now(timezone.utc).isoformat(),
@@ -641,7 +718,7 @@ def export_activities(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
 
 @app.post("/import")
-def import_activities(import_data: dict, db: Session = Depends(get_db)):
+def import_activities(import_data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         if "activities" not in import_data:
             raise HTTPException(status_code=400, detail="Invalid import format")
@@ -649,6 +726,7 @@ def import_activities(import_data: dict, db: Session = Depends(get_db)):
         imported_count = 0
         for act_data in import_data["activities"]:
             new_activity = Activity(
+                user_id=current_user.id,
                 title=act_data.get("title"),
                 description=act_data.get("description"),
                 deadline=datetime.fromisoformat(act_data["deadline"]) if act_data.get("deadline") else datetime.now(timezone.utc),
@@ -678,11 +756,14 @@ def import_activities(import_data: dict, db: Session = Depends(get_db)):
 # ==================== SUBTASK ENDPOINTS ====================
 
 @app.post("/activities/{activity_id}/subtasks", response_model=SubtaskResponse)
-def create_subtask(activity_id: int, subtask: SubtaskCreate, db: Session = Depends(get_db)):
+def create_subtask(activity_id: int, subtask: SubtaskCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         activity = db.query(Activity).filter(Activity.id == activity_id).first()
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
+        
+        if activity.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to add subtasks to this activity")
         
         new_subtask = Subtask(
             activity_id=activity_id,
@@ -704,20 +785,28 @@ def create_subtask(activity_id: int, subtask: SubtaskCreate, db: Session = Depen
         raise HTTPException(status_code=500, detail=f"Failed to create subtask: {str(e)}")
 
 @app.get("/activities/{activity_id}/subtasks", response_model=list[SubtaskResponse])
-def get_subtasks(activity_id: int, db: Session = Depends(get_db)):
+def get_subtasks(activity_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     activity = db.query(Activity).filter(Activity.id == activity_id).first()
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
+    
+    if activity.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view subtasks for this activity")
     
     subtasks = db.query(Subtask).filter(Subtask.activity_id == activity_id).order_by(Subtask.order).all()
     return subtasks
 
 @app.put("/subtasks/{subtask_id}", response_model=SubtaskResponse)
-def update_subtask(subtask_id: int, updates: SubtaskUpdate, db: Session = Depends(get_db)):
+def update_subtask(subtask_id: int, updates: SubtaskUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         subtask = db.query(Subtask).filter(Subtask.id == subtask_id).first()
         if not subtask:
             raise HTTPException(status_code=404, detail="Subtask not found")
+        
+        # Verify ownership through parent activity
+        activity = db.query(Activity).filter(Activity.id == subtask.activity_id).first()
+        if not activity or activity.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to update this subtask")
         
         if updates.title is not None:
             subtask.title = updates.title
@@ -741,10 +830,15 @@ def update_subtask(subtask_id: int, updates: SubtaskUpdate, db: Session = Depend
         raise HTTPException(status_code=500, detail=f"Failed to update subtask: {str(e)}")
 
 @app.delete("/subtasks/{subtask_id}")
-def delete_subtask(subtask_id: int, db: Session = Depends(get_db)):
+def delete_subtask(subtask_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     subtask = db.query(Subtask).filter(Subtask.id == subtask_id).first()
     if not subtask:
         raise HTTPException(status_code=404, detail="Subtask not found")
+    
+    # Verify ownership through parent activity
+    activity = db.query(Activity).filter(Activity.id == subtask.activity_id).first()
+    if not activity or activity.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this subtask")
     
     activity_id = subtask.activity_id
     db.delete(subtask)
@@ -757,9 +851,10 @@ def delete_subtask(subtask_id: int, db: Session = Depends(get_db)):
 # ==================== TEMPLATE ENDPOINTS ====================
 
 @app.post("/templates", response_model=TemplateResponse)
-def create_template(template: TemplateCreate, db: Session = Depends(get_db)):
+def create_template(template: TemplateCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         new_template = ActivityTemplate(
+            user_id=current_user.id,
             name=template.name,
             title_template=template.title_template,
             description_template=template.description_template,
@@ -777,17 +872,21 @@ def create_template(template: TemplateCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to create template: {str(e)}")
 
 @app.get("/templates", response_model=list[TemplateResponse])
-def get_templates(db: Session = Depends(get_db)):
-    return db.query(ActivityTemplate).all()
+def get_templates(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return db.query(ActivityTemplate).filter(ActivityTemplate.user_id == current_user.id).all()
 
 @app.post("/templates/{template_id}/create-activity", response_model=ActivityResponse)
-def create_activity_from_template(template_id: int, deadline: datetime, db: Session = Depends(get_db)):
+def create_activity_from_template(template_id: int, deadline: datetime, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         template = db.query(ActivityTemplate).filter(ActivityTemplate.id == template_id).first()
         if not template:
             raise HTTPException(status_code=404, detail="Template not found")
         
+        if template.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to use this template")
+        
         new_activity = Activity(
+            user_id=current_user.id,
             title=template.title_template,
             description=template.description_template,
             deadline=deadline.replace(tzinfo=timezone.utc),
@@ -817,10 +916,13 @@ def create_activity_from_template(template_id: int, deadline: datetime, db: Sess
         raise HTTPException(status_code=500, detail=f"Failed to create activity from template: {str(e)}")
 
 @app.delete("/templates/{template_id}")
-def delete_template(template_id: int, db: Session = Depends(get_db)):
+def delete_template(template_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     template = db.query(ActivityTemplate).filter(ActivityTemplate.id == template_id).first()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
+    
+    if template.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this template")
     
     db.delete(template)
     db.commit()
@@ -829,11 +931,11 @@ def delete_template(template_id: int, db: Session = Depends(get_db)):
 # ==================== BATCH OPERATIONS ====================
 
 @app.post("/activities/batch/complete")
-def batch_complete(activity_ids: list[int], db: Session = Depends(get_db)):
+def batch_complete(activity_ids: list[int], current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         completed_count = 0
         for activity_id in activity_ids:
-            activity = db.query(Activity).filter(Activity.id == activity_id).first()
+            activity = db.query(Activity).filter(Activity.id == activity_id, Activity.user_id == current_user.id).first()
             if activity and activity.status != "completed":
                 activity.status = "completed"
                 activity.completed_at = datetime.now(timezone.utc)
@@ -847,11 +949,11 @@ def batch_complete(activity_ids: list[int], db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Batch complete failed: {str(e)}")
 
 @app.post("/activities/batch/delete")
-def batch_delete(activity_ids: list[int], db: Session = Depends(get_db)):
+def batch_delete(activity_ids: list[int], current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         deleted_count = 0
         for activity_id in activity_ids:
-            activity = db.query(Activity).filter(Activity.id == activity_id).first()
+            activity = db.query(Activity).filter(Activity.id == activity_id, Activity.user_id == current_user.id).first()
             if activity:
                 log_activity_history(db, activity_id, "deleted", None, None, None)
                 db.delete(activity)
@@ -864,7 +966,7 @@ def batch_delete(activity_ids: list[int], db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Batch delete failed: {str(e)}")
 
 @app.post("/activities/batch/update-category")
-def batch_update_category(data: dict, db: Session = Depends(get_db)):
+def batch_update_category(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         activity_ids = data.get("activity_ids", [])
         category = data.get("category")
@@ -877,7 +979,7 @@ def batch_update_category(data: dict, db: Session = Depends(get_db)):
         
         updated_count = 0
         for activity_id in activity_ids:
-            activity = db.query(Activity).filter(Activity.id == activity_id).first()
+            activity = db.query(Activity).filter(Activity.id == activity_id, Activity.user_id == current_user.id).first()
             if activity:
                 old_category = activity.category
                 activity.category = category
@@ -925,12 +1027,15 @@ def log_activity_history(
 # ==================== FILE ATTACHMENT ENDPOINTS ====================
 
 @app.post("/activities/{activity_id}/attachments", response_model=AttachmentResponse)
-async def upload_attachment(activity_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_attachment(activity_id: int, file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         # Check if activity exists
         activity = db.query(Activity).filter(Activity.id == activity_id).first()
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
+        
+        if activity.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to add attachments to this activity")
         
         # Check file size
         file_content = await file.read()
@@ -963,6 +1068,7 @@ async def upload_attachment(activity_id: int, file: UploadFile = File(...), db: 
         db.refresh(attachment)
         
         log_activity_history(db, activity_id, "attachment_added", None, None, file.filename)
+        db.commit()  # Commit history entry
         
         return attachment
     except HTTPException:
@@ -975,18 +1081,26 @@ async def upload_attachment(activity_id: int, file: UploadFile = File(...), db: 
         raise HTTPException(status_code=500, detail=f"Failed to upload attachment: {str(e)}")
 
 @app.get("/activities/{activity_id}/attachments", response_model=list[AttachmentResponse])
-def list_attachments(activity_id: int, db: Session = Depends(get_db)):
+def list_attachments(activity_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     activity = db.query(Activity).filter(Activity.id == activity_id).first()
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
     
+    if activity.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view attachments for this activity")
+    
     return db.query(ActivityAttachment).filter(ActivityAttachment.activity_id == activity_id).all()
 
 @app.get("/attachments/{attachment_id}/download")
-async def download_attachment(attachment_id: int, db: Session = Depends(get_db)):
+async def download_attachment(attachment_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     attachment = db.query(ActivityAttachment).filter(ActivityAttachment.id == attachment_id).first()
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
+    
+    # Verify ownership through parent activity
+    activity = db.query(Activity).filter(Activity.id == attachment.activity_id).first()
+    if not activity or activity.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to download this attachment")
     
     if not os.path.exists(attachment.filepath):
         raise HTTPException(status_code=404, detail="File not found on server")
@@ -998,20 +1112,27 @@ async def download_attachment(attachment_id: int, db: Session = Depends(get_db))
     )
 
 @app.delete("/attachments/{attachment_id}")
-def delete_attachment(attachment_id: int, db: Session = Depends(get_db)):
+def delete_attachment(attachment_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     attachment = db.query(ActivityAttachment).filter(ActivityAttachment.id == attachment_id).first()
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
+    
+    # Verify ownership through parent activity
+    activity = db.query(Activity).filter(Activity.id == attachment.activity_id).first()
+    if not activity or activity.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this attachment")
     
     # Delete file from filesystem
     if os.path.exists(attachment.filepath):
         os.remove(attachment.filepath)
     
     activity_id = attachment.activity_id
+    filename = attachment.filename
     db.delete(attachment)
     db.commit()
     
-    log_activity_history(db, activity_id, "attachment_deleted", None, None, attachment.filename)
+    log_activity_history(db, activity_id, "attachment_deleted", None, None, filename)
+    db.commit()  # Commit history entry
     
     return {"message": "Attachment deleted successfully"}
 
