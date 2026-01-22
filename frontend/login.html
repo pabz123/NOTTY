@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Accountability System - Login</title>
+<style>
+:root {
+  --primary: #4f46e5;
+  --primary-dark: #4338ca;
+  --success: #10b981;
+  --error: #ef4444;
+  --bg: #f9fafb;
+  --card-bg: #ffffff;
+  --text: #111827;
+  --border: #e5e7eb;
+}
+
+[data-theme="dark"] {
+  --bg: #111827;
+  --card-bg: #1f2937;
+  --text: #f9fafb;
+  --border: #374151;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  transition: background 0.3s ease;
+}
+
+.container {
+  width: 100%;
+  max-width: 420px;
+  padding: 20px;
+}
+
+.card {
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 40px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.header h1 {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.header p {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.theme-toggle {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 15px;
+  cursor: pointer;
+  font-size: 20px;
+}
+
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 25px;
+}
+
+.tab {
+  flex: 1;
+  padding: 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--text);
+  transition: all 0.3s;
+}
+
+.tab.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 16px;
+  background: var(--bg);
+  color: var(--text);
+  transition: border-color 0.3s;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.btn {
+  width: 100%;
+  padding: 14px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.btn:hover {
+  background: var(--primary-dark);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.alert {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  display: none;
+}
+
+.alert.success {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #10b981;
+}
+
+.alert.error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #ef4444;
+}
+
+.alert.show {
+  display: block;
+}
+
+.form-container {
+  display: none;
+}
+
+.form-container.active {
+  display: block;
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" onclick="toggleTheme()">🌓</button>
+
+<div class="container">
+  <div class="card">
+    <div class="header">
+      <h1>📊 Accountability System</h1>
+      <p>Track your goals and stay accountable</p>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('login')">Login</button>
+      <button class="tab" onclick="switchTab('register')">Register</button>
+    </div>
+
+    <div id="alert" class="alert"></div>
+
+    <!-- Login Form -->
+    <div id="loginForm" class="form-container active">
+      <form onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="loginEmail">Email</label>
+          <input type="email" id="loginEmail" required>
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">Password</label>
+          <input type="password" id="loginPassword" required>
+        </div>
+        <button type="submit" class="btn" id="loginBtn">
+          <span class="btn-text">Login</span>
+        </button>
+      </form>
+    </div>
+
+    <!-- Register Form -->
+    <div id="registerForm" class="form-container">
+      <form onsubmit="handleRegister(event)">
+        <div class="form-group">
+          <label for="registerEmail">Email</label>
+          <input type="email" id="registerEmail" required>
+        </div>
+        <div class="form-group">
+          <label for="registerPassword">Password</label>
+          <input type="password" id="registerPassword" required minlength="6">
+        </div>
+        <div class="form-group">
+          <label for="confirmPassword">Confirm Password</label>
+          <input type="password" id="confirmPassword" required minlength="6">
+        </div>
+        <button type="submit" class="btn" id="registerBtn">
+          <span class="btn-text">Create Account</span>
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = window.location.origin;
+
+// Theme management
+function toggleTheme() {
+  const html = document.documentElement;
+  const currentTheme = html.getAttribute('data-theme');
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', newTheme);
+  localStorage.setItem('theme', newTheme);
+}
+
+const savedTheme = localStorage.getItem('theme') || 'light';
+document.documentElement.setAttribute('data-theme', savedTheme);
+
+// Tab switching
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.form-container').forEach(f => f.classList.remove('active'));
+  
+  if (tab === 'login') {
+    document.querySelectorAll('.tab')[0].classList.add('active');
+    document.getElementById('loginForm').classList.add('active');
+  } else {
+    document.querySelectorAll('.tab')[1].classList.add('active');
+    document.getElementById('registerForm').classList.add('active');
+  }
+  
+  hideAlert();
+}
+
+// Alert functions
+function showAlert(message, type) {
+  const alert = document.getElementById('alert');
+  alert.textContent = message;
+  alert.className = `alert ${type} show`;
+}
+
+function hideAlert() {
+  document.getElementById('alert').classList.remove('show');
+}
+
+// Check if already logged in
+const token = localStorage.getItem('auth_token');
+if (token) {
+  window.location.href = '/frontend/index.html';
+}
+
+// Login handler
+async function handleLogin(e) {
+  e.preventDefault();
+  hideAlert();
+  
+  const btn = document.getElementById('loginBtn');
+  const btnText = btn.querySelector('.btn-text');
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+  
+  btn.disabled = true;
+  btnText.innerHTML = '<span class="spinner"></span>';
+  
+  try {
+    const response = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      localStorage.setItem('auth_token', data.access_token);
+      localStorage.setItem('user_email', email);
+      showAlert('Login successful! Redirecting...', 'success');
+      
+      setTimeout(() => {
+        window.location.href = '/frontend/index.html';
+      }, 1000);
+    } else {
+      showAlert(data.detail || 'Login failed. Please check your credentials.', 'error');
+      btn.disabled = false;
+      btnText.textContent = 'Login';
+    }
+  } catch (error) {
+    showAlert('Network error. Please make sure the server is running.', 'error');
+    btn.disabled = false;
+    btnText.textContent = 'Login';
+  }
+}
+
+// Register handler
+async function handleRegister(e) {
+  e.preventDefault();
+  hideAlert();
+  
+  const btn = document.getElementById('registerBtn');
+  const btnText = btn.querySelector('.btn-text');
+  const email = document.getElementById('registerEmail').value;
+  const password = document.getElementById('registerPassword').value;
+  const confirmPassword = document.getElementById('confirmPassword').value;
+  
+  if (password !== confirmPassword) {
+    showAlert('Passwords do not match!', 'error');
+    return;
+  }
+  
+  btn.disabled = true;
+  btnText.innerHTML = '<span class="spinner"></span>';
+  
+  try {
+    const response = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      localStorage.setItem('auth_token', data.access_token);
+      localStorage.setItem('user_email', email);
+      showAlert('Account created successfully! Redirecting...', 'success');
+      
+      setTimeout(() => {
+        window.location.href = '/frontend/index.html';
+      }, 1000);
+    } else {
+      showAlert(data.detail || 'Registration failed. Email may already be in use.', 'error');
+      btn.disabled = false;
+      btnText.textContent = 'Create Account';
+    }
+  } catch (error) {
+    showAlert('Network error. Please make sure the server is running.', 'error');
+    btn.disabled = false;
+    btnText.textContent = 'Create Account';
+  }
+}
+</script>
+
+</body>
+</html>

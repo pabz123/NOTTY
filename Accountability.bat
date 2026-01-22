@@ -140,7 +140,7 @@ set "PYTHON_PATH=%~dp0.venv\Scripts\python.exe"
 
 REM Start the Electron app (which will start backend)
 echo Starting Electron...
-node run.js
+start "" node run.js
 
 REM Capture exit code
 set "EXIT_CODE=%ERRORLEVEL%"

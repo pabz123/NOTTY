@@ -306,6 +306,49 @@
   </div>
 </div>
 
+<!-- Edit Activity Modal -->
+<div id="editModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Edit Activity</h2>
+      <button onclick="closeModal('editModal')" class="btn-close">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editActivityId">
+      <input type="text" id="editActivityTitle" placeholder="Title" required>
+      <textarea id="editActivityDescription" placeholder="Description" rows="3"></textarea>
+      <input type="datetime-local" id="editActivityDeadline" required>
+      <select id="editActivityPriority">
+        <option value="medium">Medium Priority</option>
+        <option value="high">High Priority</option>
+        <option value="low">Low Priority</option>
+      </select>
+      <select id="editActivityCategory">
+        <option value="general">General</option>
+        <option value="work">Work</option>
+        <option value="personal">Personal</option>
+        <option value="health">Health</option>
+        <option value="finance">Finance</option>
+        <option value="education">Education</option>
+      </select>
+      <input type="number" id="editActivityNotifyMinutes" placeholder="Notify before (minutes)" value="30" min="5">
+      <label style="display: flex; align-items: center; gap: 12px; cursor: pointer;">
+        <input type="checkbox" id="editIsRecurring" onchange="toggleEditRecurringOptions()">
+        <span>Make this a Daily Routine</span>
+      </label>
+      <select id="editRecurrencePattern" disabled style="display: none;">
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="monthly">Monthly</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal('editModal')" class="btn-secondary">Cancel</button>
+      <button onclick="saveEditActivity()" class="btn-primary">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast Container -->
 <div id="toastContainer" class="toast-container"></div>
 

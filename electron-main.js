@@ -14,17 +14,26 @@ function createWindow() {
     minWidth: 1000,
     minHeight: 600,
     icon: path.join(__dirname, 'icon.png'),
+    show: false, // Don't show until ready
+    backgroundColor: '#1f2937',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      enableRemoteModule: false
+      enableRemoteModule: false,
+      webSecurity: true,
+      partition: 'persist:accountability'
     },
     autoHideMenuBar: true,
     title: 'Accountability System'
   });
 
+  // Smooth show when ready
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+  });
+
   // Load the dashboard - wait for backend first
-  mainWindow.loadURL('http://127.0.0.1:8000');
+  mainWindow.loadURL('http://127.0.0.1:8000/frontend/dashboard.html');
 
   // Open external links in default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -39,11 +48,6 @@ function createWindow() {
     }
     return false;
   });
-
-  // Open DevTools in development
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.webContents.openDevTools();
-  }
 }
 
 function checkBackendRunning() {

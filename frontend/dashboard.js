@@ -1,11 +1,184 @@
 // API Configuration
 const API_BASE = 'http://127.0.0.1:8000';
-let authToken = localStorage.getItem('authToken');
+let authToken = localStorage.getItem('auth_token'); // Changed from 'authToken' to 'auth_token'
 let currentUser = null;
+
+// Make functions globally accessible
+window.login = login;
+window.register = register;
+window.logout = logout;
+window.showLogin = showLogin;
+window.showRegister = showRegister;
 
 // Theme Management
 const savedTheme = localStorage.getItem('theme') || 'light';
 document.documentElement.setAttribute('data-theme', savedTheme);
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme');
+  const newTheme = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', newTheme);
+  localStorage.setItem('theme', newTheme);
+  updateThemeRadios();
+}
+
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+}
+
+function updateThemeRadios() {
+  const current = document.documentElement.getAttribute('data-theme');
+  document.querySelectorAll('input[name="theme"]').forEach(radio => {
+    radio.checked = radio.value === current;
+  });
+}
+
+// ============= AUTHENTICATION =============
+
+function showLogin() {
+  document.getElementById('loginForm').style.display = 'block';
+  document.getElementById('registerForm').style.display = 'none';
+}
+
+function showRegister() {
+  document.getElementById('loginForm').style.display = 'none';
+  document.getElementById('registerForm').style.display = 'block';
+}
+
+async function login() {
+  console.log('Login function called');
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+  
+  console.log('Email:', email);
+  console.log('Password length:', password.length);
+  
+  if (!email || !password) {
+    showToast('Please fill all fields', 'error');
+    return;
+  }
+  
+  try {
+    console.log('Sending login request to:', `${API_BASE}/auth/login`);
+    const response = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    
+    console.log('Response status:', response.status);
+    const data = await response.json();
+    console.log('Response data:', data);
+    
+    if (response.ok) {
+      authToken = data.access_token;
+      localStorage.setItem('auth_token', authToken);
+      localStorage.setItem('authToken', authToken);
+      console.log('Token saved, showing app');
+      showApp();
+      showToast('Welcome back!', 'success');
+    } else {
+      console.error('Login failed:', data);
+      showToast(data.detail || 'Login failed', 'error');
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    showToast('Network error: ' + error.message, 'error');
+  }
+}
+
+async function register() {
+  console.log('Register function called');
+  const email = document.getElementById('registerEmail').value.trim();
+  const password = document.getElementById('registerPassword').value;
+  const confirm = document.getElementById('registerConfirm').value;
+  
+  console.log('Email:', email);
+  console.log('Password length:', password.length);
+  console.log('Passwords match:', password === confirm);
+  
+  if (!email || !password || !confirm) {
+    showToast('Please fill all fields', 'error');
+    return;
+  }
+  
+  if (password !== confirm) {
+    showToast('Passwords do not match', 'error');
+    return;
+  }
+  
+  try {
+    console.log('Sending register request to:', `${API_BASE}/auth/register`);
+    const response = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    
+    console.log('Response status:', response.status);
+    const data = await response.json();
+    console.log('Response data:', data);
+    
+    if (response.ok) {
+      authToken = data.access_token;
+      localStorage.setItem('auth_token', authToken);
+      localStorage.setItem('authToken', authToken);
+      console.log('Token saved, showing app');
+      showApp();
+      showToast('Account created successfully!', 'success');
+    } else {
+      console.error('Registration failed:', data);
+      showToast(data.detail || 'Registration failed', 'error');
+    }
+  } catch (error) {
+    console.error('Register error:', error);
+    showToast('Network error: ' + error.message, 'error');
+  }
+}
+
+function logout() {
+  disconnectSSE();
+  localStorage.removeItem('auth_token'); // Remove both token keys
+  localStorage.removeItem('authToken');
+  authToken = null;
+  document.getElementById('authScreen').style.display = 'flex';
+  document.getElementById('mainApp').style.display = 'none';
+  showToast('Logged out successfully', 'success');
+}
+
+function showApp() {
+  document.getElementById('authScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'flex';
+  initApp();
+}
+
+// Override fetch to automatically add auth headers (like app.js)
+const originalFetch = window.fetch;
+window.fetch = async function(url, options = {}) {
+  const token = localStorage.getItem('auth_token');
+  
+  // Add auth header for API requests
+  if (token && typeof url === 'string' && url.includes(API_BASE)) {
+    options.headers = {
+      ...options.headers,
+      'Authorization': `Bearer ${token}`
+    };
+  }
+  
+  const response = await originalFetch(url, options);
+  
+  // If unauthorized, logout
+  if (response.status === 401) {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('authToken');
+    authToken = null;
+    document.getElementById('authScreen').style.display = 'flex';
+    document.getElementById('mainApp').style.display = 'none';
+  }
+  
+  return response;
+};
 
 function toggleTheme() {
   const current = document.documentElement.getAttribute('data-theme');
@@ -66,101 +239,6 @@ function showConfirm(message, title = 'Confirm Action') {
       }
     };
   });
-}
-
-// ============= AUTHENTICATION =============
-
-function showLogin() {
-  document.getElementById('loginForm').style.display = 'block';
-  document.getElementById('registerForm').style.display = 'none';
-}
-
-function showRegister() {
-  document.getElementById('loginForm').style.display = 'none';
-  document.getElementById('registerForm').style.display = 'block';
-}
-
-async function login() {
-  const email = document.getElementById('loginEmail').value;
-  const password = document.getElementById('loginPassword').value;
-  
-  if (!email || !password) {
-    showToast('Please fill all fields', 'error');
-    return;
-  }
-  
-  try {
-    const response = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    
-    const data = await response.json();
-    
-    if (response.ok) {
-      authToken = data.access_token;
-      localStorage.setItem('authToken', authToken);
-      showApp();
-      showToast('Welcome back!', 'success');
-    } else {
-      showToast(data.detail || 'Login failed', 'error');
-    }
-  } catch (error) {
-    showToast('Network error. Please try again.', 'error');
-  }
-}
-
-async function register() {
-  const email = document.getElementById('registerEmail').value.trim();
-  const password = document.getElementById('registerPassword').value;
-  const confirm = document.getElementById('registerConfirm').value;
-  
-  if (!email || !password || !confirm) {
-    showToast('Please fill all fields', 'error');
-    return;
-  }
-  
-  if (password !== confirm) {
-    showToast('Passwords do not match', 'error');
-    return;
-  }
-  
-  try {
-    const response = await fetch(`${API_BASE}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    
-    const data = await response.json();
-    
-    if (response.ok) {
-      authToken = data.access_token;
-      localStorage.setItem('authToken', authToken);
-      showApp();
-      showToast('Account created successfully!', 'success');
-    } else {
-      showToast(data.detail || 'Registration failed', 'error');
-    }
-  } catch (error) {
-    showToast('Network error. Please try again.', 'error');
-  }
-}
-
-function logout() {
-  disconnectSSE();
-  localStorage.removeItem('authToken');
-  authToken = null;
-  document.getElementById('authScreen').style.display = 'flex';
-  document.getElementById('mainApp').style.display = 'none';
-  showToast('Logged out successfully', 'success');
-}
-
-function showApp() {
-  document.getElementById('authScreen').style.display = 'none';
-  document.getElementById('mainApp').style.display = 'flex';
-  initApp();
 }
 
 // ============= NAVIGATION =============
@@ -362,23 +440,31 @@ async function loadActivities() {
       return;
     }
     
-    grid.innerHTML = activities.map(activity => `
+    grid.innerHTML = activities.map((activity, index) => {
+      // Store activity data in a global array for easy access
+      window.activitiesData = window.activitiesData || {};
+      window.activitiesData[activity.id] = activity;
+      
+      return `
       <div class="activity-card priority-${activity.priority}">
-        <div class="activity-title">${activity.title}</div>
+        <div class="activity-title">${activity.title}${activity.is_recurring ? ' 🔄' : ''}</div>
         ${activity.description ? `<div class="activity-description">${activity.description}</div>` : ''}
         <div class="activity-meta">
           <span class="activity-badge badge-${activity.status}">${activity.status}</span>
+          ${activity.is_recurring ? '<span class="activity-badge" style="background: #8b5cf6;">Daily Routine</span>' : ''}
           <span style="color: var(--text-secondary); font-size: 13px;">
             📅 ${new Date(activity.deadline).toLocaleString()}
           </span>
         </div>
         <div class="activity-actions">
-          ${activity.status === 'pending' ? 
+          ${activity.status === 'pending' || activity.status === 'missed' ? 
             `<button class="btn-success btn-sm" onclick="completeActivity(${activity.id})">✓ Complete</button>` : ''}
+          <button class="btn-secondary btn-sm" onclick="editActivityById(${activity.id})">✏️ Edit</button>
           <button class="btn-danger btn-sm" onclick="deleteActivity(${activity.id})">🗑 Delete</button>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
     
   } catch (error) {
     console.error('Failed to load activities:', error);
@@ -455,47 +541,111 @@ async function createActivity() {
     showToast('Failed to create activity', 'error');
   }
 }
-  const description = document.getElementById('activityDescription').value;
-  const deadline = document.getElementById('activityDeadline').value;
-  const priority = document.getElementById('activityPriority').value;
-  const category = document.getElementById('activityCategory').value;
-  const notificationMinutes = parseInt(document.getElementById('activityNotifyMinutes').value);
+
+// ============= EDIT ACTIVITY =============
+
+function showEditModal(activity) {
+  document.getElementById('editActivityId').value = activity.id;
+  document.getElementById('editActivityTitle').value = activity.title;
+  document.getElementById('editActivityDescription').value = activity.description || '';
+  
+  // Format deadline for datetime-local input
+  const deadline = new Date(activity.deadline);
+  const formattedDeadline = deadline.toISOString().slice(0, 16);
+  document.getElementById('editActivityDeadline').value = formattedDeadline;
+  
+  document.getElementById('editActivityPriority').value = activity.priority;
+  document.getElementById('editActivityCategory').value = activity.category;
+  document.getElementById('editActivityNotifyMinutes').value = activity.notification_minutes || 30;
+  
+  // Set recurring checkbox
+  const isRecurring = activity.is_recurring || false;
+  document.getElementById('editIsRecurring').checked = isRecurring;
+  
+  if (isRecurring && activity.recurrence_pattern) {
+    document.getElementById('editRecurrencePattern').value = activity.recurrence_pattern;
+  }
+  
+  toggleEditRecurringOptions();
+  document.getElementById('editModal').classList.add('active');
+}
+
+function toggleEditRecurringOptions() {
+  const checkbox = document.getElementById('editIsRecurring');
+  const select = document.getElementById('editRecurrencePattern');
+  
+  if (checkbox.checked) {
+    select.disabled = false;
+    select.style.display = 'block';
+  } else {
+    select.disabled = true;
+    select.style.display = 'none';
+  }
+}
+
+async function saveEditActivity() {
+  const id = document.getElementById('editActivityId').value;
+  const title = document.getElementById('editActivityTitle').value;
+  const description = document.getElementById('editActivityDescription').value;
+  const deadline = document.getElementById('editActivityDeadline').value;
+  const priority = document.getElementById('editActivityPriority').value;
+  const category = document.getElementById('editActivityCategory').value;
+  const notifyMinutes = parseInt(document.getElementById('editActivityNotifyMinutes').value);
+  const isRecurring = document.getElementById('editIsRecurring').checked;
+  const recurrencePattern = isRecurring ? document.getElementById('editRecurrencePattern').value : null;
   
   if (!title || !deadline) {
     showToast('Please fill required fields', 'error');
     return;
   }
   
+  const activityData = {
+    title,
+    description,
+    deadline,
+    priority,
+    category,
+    notification_minutes: notifyMinutes,
+    is_recurring: isRecurring,
+    recurrence_pattern: recurrencePattern
+  };
+  
   try {
-    const response = await apiRequest('/activities', {
-      method: 'POST',
-      body: JSON.stringify({
-        title,
-        description,
-        deadline,
-        priority,
-        category,
-        notification_minutes: notificationMinutes,
-        is_recurring: false
-      })
+    const response = await apiRequest(`/activities/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(activityData)
     });
     
     if (response.ok) {
-      showToast('Activity created successfully!', 'success');
-      closeModal('createModal');
+      showToast(isRecurring ? 'Activity updated and converted to daily routine!' : 'Activity updated successfully!', 'success');
+      closeModal('editModal');
+      loadActivities();
       loadDashboard();
-      // Clear form
-      document.getElementById('activityTitle').value = '';
-      document.getElementById('activityDescription').value = '';
-      document.getElementById('activityDeadline').value = '';
     } else {
       const error = await response.json();
-      showToast(error.detail || 'Failed to create activity', 'error');
+      showToast(error.detail || 'Failed to update activity', 'error');
     }
   } catch (error) {
-    showToast('Network error', 'error');
+    console.error('Edit activity error:', error);
+    showToast('Failed to update activity', 'error');
   }
 }
+
+// Make edit functions globally accessible
+window.showEditModal = showEditModal;
+window.toggleEditRecurringOptions = toggleEditRecurringOptions;
+window.saveEditActivity = saveEditActivity;
+
+// Helper function to edit by ID
+function editActivityById(id) {
+  const activity = window.activitiesData[id];
+  if (activity) {
+    showEditModal(activity);
+  } else {
+    showToast('Activity not found', 'error');
+  }
+}
+window.editActivityById = editActivityById;
 
 // ============= ACTIVITY ACTIONS =============
 
@@ -866,12 +1016,34 @@ function initApp() {
   requestNotificationPermission();
 }
 
-// Check authentication on load
+// Check authentication on load (use auth_token like app.js)
+authToken = localStorage.getItem('auth_token') || localStorage.getItem('authToken');
 if (authToken) {
+  // Save in both formats for compatibility
+  localStorage.setItem('auth_token', authToken);
   showApp();
 } else {
   document.getElementById('authScreen').style.display = 'flex';
 }
+
+// Add Enter key support for login form
+document.getElementById('loginEmail')?.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') login();
+});
+document.getElementById('loginPassword')?.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') login();
+});
+
+// Add Enter key support for register form
+document.getElementById('registerEmail')?.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') register();
+});
+document.getElementById('registerPassword')?.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') register();
+});
+document.getElementById('registerConfirm')?.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') register();
+});
 
 // Clean up SSE on page unload
 window.addEventListener('beforeunload', () => {

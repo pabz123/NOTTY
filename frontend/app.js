@@ -1,3 +1,56 @@
+// ==================== AUTHENTICATION ====================
+
+// Check if user is logged in
+const authToken = localStorage.getItem('auth_token');
+if (!authToken) {
+  window.location.href = '/frontend/login.html';
+}
+
+// Add logout button to header (inject after page loads)
+window.addEventListener('DOMContentLoaded', () => {
+  const headerControls = document.querySelector('.header-controls');
+  if (headerControls) {
+    const logoutBtn = document.createElement('button');
+    logoutBtn.textContent = '🚪 Logout';
+    logoutBtn.style.cssText = 'background: #ef4444; color: white;';
+    logoutBtn.onclick = logout;
+    headerControls.appendChild(logoutBtn);
+  }
+});
+
+function logout() {
+  if (confirm('Are you sure you want to logout?')) {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user_email');
+    window.location.href = '/frontend/login.html';
+  }
+}
+
+// Override fetch to automatically add auth headers
+const originalFetch = window.fetch;
+window.fetch = async function(url, options = {}) {
+  const token = localStorage.getItem('auth_token');
+  
+  // Only add auth header for API requests (not external resources)
+  if (token && (typeof url === 'string' && (url.includes('/activities') || url.includes('/auth') || url.includes('/stats') || url.includes('/templates') || url.includes('/export') || url.includes('/import') || url.includes('/achievements') || url.includes('/goal-status')))) {
+    options.headers = {
+      ...options.headers,
+      'Authorization': `Bearer ${token}`
+    };
+  }
+  
+  const response = await originalFetch(url, options);
+  
+  // If unauthorized, redirect to login
+  if (response.status === 401 && url.includes('/')) {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user_email');
+    window.location.href = '/frontend/login.html';
+  }
+  
+  return response;
+};
+
 // Theme management
 function toggleTheme() {
   const html = document.documentElement;
