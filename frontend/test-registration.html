@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Registration Test</title>
+</head>
+<body>
+    <h2>Test Registration API</h2>
+    <div id="status"></div>
+    
+    <form id="testForm">
+        <input type="email" id="email" placeholder="Email" value="test@example.com"><br><br>
+        <input type="password" id="password" placeholder="Password" value="password123"><br><br>
+        <button type="submit">Test Register</button>
+    </form>
+    
+    <div id="response" style="margin-top:20px;padding:10px;border:1px solid #ccc;"></div>
+    
+    <script>
+        document.getElementById('testForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const responseDiv = document.getElementById('response');
+            
+            responseDiv.innerHTML = 'Testing...';
+            
+            try {
+                const response = await fetch('http://127.0.0.1:8000/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                responseDiv.innerHTML = `
+                    <h3>Response Status: ${response.status}</h3>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+                
+                if (response.ok) {
+                    responseDiv.style.background = '#d4edda';
+                    responseDiv.style.color = '#155724';
+                } else {
+                    responseDiv.style.background = '#f8d7da';
+                    responseDiv.style.color = '#721c24';
+                }
+            } catch (error) {
+                responseDiv.innerHTML = `
+                    <h3>Error:</h3>
+                    <p>${error.message}</p>
+                    <p><strong>Make sure the backend is running on http://127.0.0.1:8000</strong></p>
+                `;
+                responseDiv.style.background = '#fff3cd';
+                responseDiv.style.color = '#856404';
+            }
+        });
+        
+        // Test backend connectivity
+        fetch('http://127.0.0.1:8000/docs')
+            .then(() => {
+                document.getElementById('status').innerHTML = '✅ Backend is running';
+                document.getElementById('status').style.color = 'green';
+            })
+            .catch(() => {
+                document.getElementById('status').innerHTML = '❌ Backend is NOT running. Start it first!';
+                document.getElementById('status').style.color = 'red';
+            });
+    </script>
+</body>
+</html>

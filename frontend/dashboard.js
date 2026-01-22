@@ -1,6 +1,7 @@
 // API Configuration
 const API_BASE = 'http://127.0.0.1:8000';
 let authToken = localStorage.getItem('authToken');
+let currentUser = null;
 
 // Theme Management
 const savedTheme = localStorage.getItem('theme') || 'light';
@@ -11,6 +12,60 @@ function toggleTheme() {
   const newTheme = current === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', newTheme);
   localStorage.setItem('theme', newTheme);
+  updateThemeRadios();
+}
+
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+}
+
+function updateThemeRadios() {
+  const current = document.documentElement.getAttribute('data-theme');
+  document.querySelectorAll('input[name="theme"]').forEach(radio => {
+    radio.checked = radio.value === current;
+  });
+}
+
+// ============= CUSTOM CONFIRMATION MODAL =============
+
+function showConfirm(message, title = 'Confirm Action') {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('confirmModal');
+    const titleEl = document.getElementById('confirmTitle');
+    const messageEl = document.getElementById('confirmMessage');
+    const okBtn = document.getElementById('confirmOk');
+    const cancelBtn = document.getElementById('confirmCancel');
+    
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+    
+    modal.classList.add('active');
+    
+    const cleanup = () => {
+      modal.classList.remove('active');
+      okBtn.onclick = null;
+      cancelBtn.onclick = null;
+    };
+    
+    okBtn.onclick = () => {
+      cleanup();
+      resolve(true);
+    };
+    
+    cancelBtn.onclick = () => {
+      cleanup();
+      resolve(false);
+    };
+    
+    // Close on background click
+    modal.onclick = (e) => {
+      if (e.target === modal) {
+        cleanup();
+        resolve(false);
+      }
+    };
+  });
 }
 
 // ============= AUTHENTICATION =============
@@ -139,6 +194,7 @@ function switchView(viewName) {
   else if (viewName === 'activities') loadActivities();
   else if (viewName === 'analytics') loadAnalytics();
   else if (viewName === 'templates') loadTemplates();
+  else if (viewName === 'settings') loadSettings();
 }
 
 // ============= API HELPERS =============
@@ -356,6 +412,53 @@ async function createActivity() {
   const deadline = document.getElementById('activityDeadline').value;
   const priority = document.getElementById('activityPriority').value;
   const category = document.getElementById('activityCategory').value;
+  const notifyMinutes = parseInt(document.getElementById('activityNotifyMinutes').value);
+  const isRecurring = document.getElementById('isRecurring').checked;
+  const recurrencePattern = document.getElementById('recurrencePattern').value;
+  
+  if (!title || !deadline) {
+    showToast('Please fill required fields', 'error');
+    return;
+  }
+  
+  const activityData = {
+    title,
+    description,
+    deadline,
+    priority,
+    category,
+    notification_minutes: notifyMinutes,
+    is_recurring: isRecurring,
+    recurrence_pattern: isRecurring ? recurrencePattern : null
+  };
+  
+  try {
+    const response = await apiRequest('/activities', {
+      method: 'POST',
+      body: JSON.stringify(activityData)
+    });
+    
+    if (response.ok) {
+      showToast(isRecurring ? 'Recurring activity created!' : 'Activity created!', 'success');
+      closeModal('createModal');
+      loadActivities();
+      loadDashboard();
+      
+      // Clear form
+      document.getElementById('activityTitle').value = '';
+      document.getElementById('activityDescription').value = '';
+      document.getElementById('activityDeadline').value = '';
+      document.getElementById('isRecurring').checked = false;
+      toggleRecurringOptions();
+    }
+  } catch (error) {
+    showToast('Failed to create activity', 'error');
+  }
+}
+  const description = document.getElementById('activityDescription').value;
+  const deadline = document.getElementById('activityDeadline').value;
+  const priority = document.getElementById('activityPriority').value;
+  const category = document.getElementById('activityCategory').value;
   const notificationMinutes = parseInt(document.getElementById('activityNotifyMinutes').value);
   
   if (!title || !deadline) {
@@ -410,7 +513,12 @@ async function completeActivity(id) {
 }
 
 async function deleteActivity(id) {
-  if (!confirm('Delete this activity?')) return;
+  const confirmed = await showConfirm(
+    'Are you sure you want to delete this activity? This action cannot be undone.',
+    'Delete Activity'
+  );
+  
+  if (!confirmed) return;
   
   try {
     const response = await apiRequest(`/activities/${id}`, { method: 'DELETE' });
@@ -463,6 +571,11 @@ async function loadTemplates() {
     const templates = await response.json();
     
     const grid = document.getElementById('templatesGrid');
+    if (templates.length === 0) {
+      grid.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">No templates yet. Create one to get started!</p>';
+      return;
+    }
+    
     grid.innerHTML = templates.map(t => `
       <div class="activity-card">
         <div class="activity-title">${t.name}</div>
@@ -475,7 +588,109 @@ async function loadTemplates() {
     `).join('');
   } catch (error) {
     console.error('Failed to load templates:', error);
+    showToast('Failed to load templates', 'error');
   }
+}
+
+async function deleteTemplate(id) {
+  const confirmed = await showConfirm(
+    'Delete this template?',
+    'Delete Template'
+  );
+  
+  if (!confirmed) return;
+  
+  try {
+    const response = await apiRequest(`/templates/${id}`, { method: 'DELETE' });
+    if (response.ok) {
+      showToast('Template deleted', 'success');
+      loadTemplates();
+    }
+  } catch (error) {
+    showToast('Failed to delete template', 'error');
+  }
+}
+
+// ============= SETTINGS =============
+
+function toggleRecurringOptions() {
+  const checkbox = document.getElementById('isRecurring');
+  const patternSelect = document.getElementById('recurrencePattern');
+  
+  if (checkbox.checked) {
+    patternSelect.disabled = false;
+    patternSelect.style.display = 'block';
+  } else {
+    patternSelect.disabled = true;
+    patternSelect.style.display = 'none';
+  }
+}
+
+async function changePassword() {
+  const current = document.getElementById('currentPassword').value;
+  const newPass = document.getElementById('newPassword').value;
+  const confirm = document.getElementById('confirmNewPassword').value;
+  
+  if (!current || !newPass || !confirm) {
+    showToast('Please fill all fields', 'error');
+    return;
+  }
+  
+  if (newPass !== confirm) {
+    showToast('New passwords do not match', 'error');
+    return;
+  }
+  
+  if (newPass.length < 6) {
+    showToast('Password must be at least 6 characters', 'error');
+    return;
+  }
+  
+  try {
+    const response = await apiRequest('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password: current, new_password: newPass })
+    });
+    
+    if (response.ok) {
+      showToast('Password updated successfully', 'success');
+      document.getElementById('currentPassword').value = '';
+      document.getElementById('newPassword').value = '';
+      document.getElementById('confirmNewPassword').value = '';
+    } else {
+      const data = await response.json();
+      showToast(data.detail || 'Failed to update password', 'error');
+    }
+  } catch (error) {
+    showToast('Failed to update password', 'error');
+  }
+}
+
+function toggleBrowserNotifications() {
+  const enabled = document.getElementById('enableBrowserNotifications').checked;
+  
+  if (enabled) {
+    requestNotificationPermission();
+  }
+}
+
+async function loadSettings() {
+  // Load user info
+  try {
+    const response = await apiRequest('/auth/me');
+    const user = await response.json();
+    currentUser = user;
+    document.getElementById('profileEmail').value = user.email;
+  } catch (error) {
+    console.error('Failed to load user info:', error);
+  }
+  
+  // Set theme radios
+  updateThemeRadios();
+  
+  // Set notification preferences
+  const notificationPerm = Notification.permission === 'granted';
+  document.getElementById('enableBrowserNotifications').checked = notificationPerm;
 }
 
 // ============= UTILITIES =============
@@ -584,23 +799,50 @@ function handleNotification(data) {
 }
 
 function showBrowserNotification(title, body) {
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(title, {
-      body: body,
-      icon: '📊',
-      badge: '📊'
-    });
+  if ('Notification' in window) {
+    if (Notification.permission === 'granted') {
+      new Notification(title, {
+        body: body,
+        icon: '/favicon.ico',
+        badge: '📊',
+        tag: 'accountability-notification',
+        requireInteraction: false
+      });
+    } else if (Notification.permission === 'default') {
+      // Auto-request if not decided
+      requestNotificationPermission().then(() => {
+        if (Notification.permission === 'granted') {
+          new Notification(title, {
+            body: body,
+            icon: '/favicon.ico',
+            badge: '📊'
+          });
+        }
+      });
+    }
   }
 }
 
 function requestNotificationPermission() {
-  if ('Notification' in window && Notification.permission === 'default') {
-    Notification.requestPermission().then(permission => {
-      if (permission === 'granted') {
-        showToast('Browser notifications enabled!', 'success');
-      }
-    });
-  }
+  return new Promise((resolve) => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          showToast('Browser notifications enabled!', 'success');
+          document.getElementById('enableBrowserNotifications').checked = true;
+        } else {
+          showToast('Browser notifications denied', 'warning');
+          document.getElementById('enableBrowserNotifications').checked = false;
+        }
+        resolve(permission);
+      });
+    } else if (Notification.permission === 'granted') {
+      document.getElementById('enableBrowserNotifications').checked = true;
+      resolve('granted');
+    } else {
+      resolve(Notification.permission);
+    }
+  });
 }
 
 function disconnectSSE() {

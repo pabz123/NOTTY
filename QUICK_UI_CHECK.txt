@@ -1,0 +1,126 @@
+📋 QUICK CHECKLIST - UI Stops on Sign In
+=========================================
+
+## ✅ The app STARTS (Good progress!)
+## ❌ But registration/login doesn't work
+
+---
+
+## QUICK TESTS (Do these in order):
+
+### Test 1: Is backend running?
+Look at the Command Prompt window where backend started.
+**Should see:** "Application startup complete"
+**If not:** Backend crashed, restart Accountability.bat
+
+### Test 2: Open test page
+```batch
+open-test-page.bat
+```
+OR open: http://127.0.0.1:8000/frontend/test-auth.html
+
+**Try to register** on test page:
+- ✅ Works? → Problem is dashboard.js
+- ❌ Doesn't work? → Problem is backend API
+
+### Test 3: Check browser console
+**In the Electron app:**
+1. Press F12
+2. Click Console tab
+3. Look for red errors
+
+**Common errors:**
+- "Failed to load resource" → dashboard.js missing
+- "Uncaught SyntaxError" → dashboard.js corrupted
+- "login is not defined" → JavaScript not loaded
+- "Failed to fetch" → Backend not responding
+
+### Test 4: Check Network tab
+**In F12 console:**
+1. Click Network tab
+2. Try to register
+3. Look for "auth/register" request
+
+**What to check:**
+- No request appears? → JavaScript not running
+- Request failed? → Backend issue
+- Status 400/401? → Check response
+
+---
+
+## Most Likely Causes:
+
+### Cause 1: JavaScript File Not Loading (90% likely)
+**Symptoms:**
+- Buttons do nothing
+- No network requests
+- Console shows "Failed to load dashboard.js"
+
+**Fix:**
+Check file exists: `frontend/dashboard.js`
+If missing → Restore from backup
+
+### Cause 2: CORS Blocking Requests
+**Symptoms:**
+- Console shows "CORS policy blocked"
+- Network request shows CORS error
+
+**Fix:**
+```batch
+# Restart backend (already fixed CORS)
+# Press Ctrl+C in backend window
+Accountability.bat
+```
+
+### Cause 3: Backend Not Responding
+**Symptoms:**
+- Test page shows "Backend is NOT running"
+- Network requests timeout
+- Console shows "Failed to fetch"
+
+**Fix:**
+Check backend console for errors, restart if needed
+
+### Cause 4: Function Not Defined
+**Symptoms:**
+- Console shows "login is not defined"
+- JavaScript loaded but functions missing
+
+**Fix:**
+dashboard.js may be corrupted
+
+---
+
+## RIGHT NOW:
+
+**Step 1:** Run `open-test-page.bat`
+
+**Step 2:** Try to register on test page
+
+**Step 3:** Tell me:
+- ✅ Test page works? (registration succeeds)
+- ❌ Test page fails? (what error)
+- 📸 Screenshot of Console tab (F12)
+
+**Step 4:** In main app, press F12 and paste this in Console:
+
+```javascript
+console.log('API_BASE:', typeof API_BASE !== 'undefined' ? API_BASE : 'MISSING');
+console.log('login:', typeof login);
+console.log('register:', typeof register);
+```
+
+Copy the output!
+
+---
+
+## Files to Check:
+
+✅ frontend/dashboard.html exists?
+✅ frontend/dashboard.js exists?
+✅ frontend/dashboard-styles.css exists?
+✅ Backend console shows "Application startup complete"?
+
+---
+
+The test-auth.html page will show us EXACTLY what's wrong! 🔍

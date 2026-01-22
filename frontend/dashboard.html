@@ -61,6 +61,10 @@
         <span class="nav-icon">📝</span>
         <span>Templates</span>
       </a>
+      <a href="#" class="nav-item" data-view="settings">
+        <span class="nav-icon">⚙️</span>
+        <span>Settings</span>
+      </a>
     </nav>
     <div class="sidebar-footer">
       <button onclick="toggleTheme()" class="btn-icon" title="Toggle Theme">🌓</button>
@@ -198,6 +202,65 @@
       <div id="templatesGrid" class="templates-grid"></div>
     </div>
 
+    <!-- Settings View -->
+    <div id="settingsView" class="view">
+      <header class="view-header">
+        <h1>Settings & Profile</h1>
+      </header>
+      
+      <div class="content-card" style="margin-bottom: 24px;">
+        <h3>Profile Information</h3>
+        <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 16px;">
+          <div>
+            <label style="display: block; margin-bottom: 8px; font-weight: 600;">Email</label>
+            <input type="email" id="profileEmail" readonly style="background: var(--bg-tertiary); opacity: 0.6;">
+          </div>
+        </div>
+      </div>
+
+      <div class="content-card" style="margin-bottom: 24px;">
+        <h3>Change Password</h3>
+        <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 16px;">
+          <input type="password" id="currentPassword" placeholder="Current Password">
+          <input type="password" id="newPassword" placeholder="New Password">
+          <input type="password" id="confirmNewPassword" placeholder="Confirm New Password">
+          <button onclick="changePassword()" class="btn-primary">Update Password</button>
+        </div>
+      </div>
+
+      <div class="content-card" style="margin-bottom: 24px;">
+        <h3>Notification Preferences</h3>
+        <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 16px;">
+          <label style="display: flex; align-items: center; gap: 12px; cursor: pointer;">
+            <input type="checkbox" id="enableBrowserNotifications" onchange="toggleBrowserNotifications()">
+            <span>Enable browser notifications</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 12px; cursor: pointer;">
+            <input type="checkbox" id="enableSoundNotifications">
+            <span>Enable sound notifications</span>
+          </label>
+          <div>
+            <label style="display: block; margin-bottom: 8px; font-weight: 600;">Default notification time (minutes before deadline)</label>
+            <input type="number" id="defaultNotificationMinutes" value="30" min="5" max="1440">
+          </div>
+        </div>
+      </div>
+
+      <div class="content-card">
+        <h3>Theme Preferences</h3>
+        <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 16px;">
+          <label style="display: flex; align-items: center; gap: 12px; cursor: pointer;">
+            <input type="radio" name="theme" value="light" onchange="setTheme('light')">
+            <span>Light Theme</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 12px; cursor: pointer;">
+            <input type="radio" name="theme" value="dark" onchange="setTheme('dark')">
+            <span>Dark Theme</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -226,6 +289,15 @@
         <option value="education">Education</option>
       </select>
       <input type="number" id="activityNotifyMinutes" placeholder="Notify before (minutes)" value="30" min="5">
+      <label style="display: flex; align-items: center; gap: 12px; cursor: pointer;">
+        <input type="checkbox" id="isRecurring" onchange="toggleRecurringOptions()">
+        <span>Recurring Activity (Daily Routine)</span>
+      </label>
+      <select id="recurrencePattern" disabled style="display: none;">
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="monthly">Monthly</option>
+      </select>
     </div>
     <div class="modal-footer">
       <button onclick="closeModal('createModal')" class="btn-secondary">Cancel</button>
@@ -236,6 +308,22 @@
 
 <!-- Toast Container -->
 <div id="toastContainer" class="toast-container"></div>
+
+<!-- Custom Confirmation Modal -->
+<div id="confirmModal" class="confirm-modal">
+  <div class="confirm-content">
+    <div class="confirm-header">
+      <h3 id="confirmTitle">Confirm Action</h3>
+    </div>
+    <div class="confirm-body">
+      <p id="confirmMessage"></p>
+    </div>
+    <div class="confirm-footer">
+      <button id="confirmCancel" class="btn-secondary">Cancel</button>
+      <button id="confirmOk" class="btn-danger">Confirm</button>
+    </div>
+  </div>
+</div>
 
 <script src="dashboard.js"></script>
 </body>

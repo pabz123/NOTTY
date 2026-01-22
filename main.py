@@ -113,6 +113,33 @@ def login(request: Request, user_data: UserLogin, db: Session = Depends(get_db))
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
+@app.post("/auth/change-password")
+def change_password(
+    password_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Change user password"""
+    current_password = password_data.get("current_password")
+    new_password = password_data.get("new_password")
+    
+    if not current_password or not new_password:
+        raise HTTPException(status_code=400, detail="Both current and new passwords are required")
+    
+    # Verify current password
+    if not verify_password(current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    
+    # Validate new password
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    
+    # Update password
+    current_user.password_hash = get_password_hash(new_password)
+    db.commit()
+    
+    return {"message": "Password updated successfully"}
+
 # ==================== ACTIVITY ENDPOINTS ====================
 
 @app.post("/activities", response_model=ActivityResponse)
@@ -1135,6 +1162,19 @@ def delete_attachment(attachment_id: int, current_user: User = Depends(get_curre
     db.commit()  # Commit history entry
     
     return {"message": "Attachment deleted successfully"}
+
+# ==================== SERVE FRONTEND FILES ====================
+
+from fastapi.staticfiles import StaticFiles
+
+# Mount static files for frontend
+app.mount("/frontend", StaticFiles(directory="frontend", html=True), name="frontend")
+
+# Serve dashboard as default
+@app.get("/")
+def root():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/frontend/dashboard.html")
 
 #@app.get("/activities")
 #def get_activities(user=Depends(get_current_user)):
