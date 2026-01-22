@@ -41,6 +41,10 @@ app = FastAPI()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# Mount the frontend directory to serve static files
+from fastapi.staticfiles import StaticFiles
+app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
