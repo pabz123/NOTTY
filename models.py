@@ -84,3 +84,15 @@ class ActivityAttachment(Base):
     filesize = Column(Integer, nullable=False)  # in bytes
     content_type = Column(String, nullable=True)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    type = Column(String, nullable=False)  # due_soon, missed, completed, created, etc.
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=True)
+    activity_id = Column(Integer, ForeignKey("activities.id", ondelete="SET NULL"), nullable=True)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

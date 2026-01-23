@@ -3,9 +3,29 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 let mainWindow = null;
+let splashWindow = null;
 let tray = null;
 let pythonProcess = null;
 const API_URL = 'http://127.0.0.1:8000';
+
+function createSplashScreen() {
+  splashWindow = new BrowserWindow({
+    width: 400,
+    height: 500,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    icon: path.join(__dirname, 'icon.png'),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  splashWindow.loadFile(path.join(__dirname, 'splash.html'));
+  splashWindow.center();
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -29,6 +49,11 @@ function createWindow() {
 
   // Smooth show when ready
   mainWindow.once('ready-to-show', () => {
+    // Close splash and show main window
+    if (splashWindow) {
+      splashWindow.close();
+      splashWindow = null;
+    }
     mainWindow.show();
   });
 
@@ -261,7 +286,12 @@ app.whenReady().then(async () => {
     console.log('  Accountability System Starting...');
     console.log('========================================\n');
     
-    console.log('[1/3] Starting Python backend...');
+    // Show splash screen immediately
+    console.log('[0/4] Creating splash screen...');
+    createSplashScreen();
+    console.log('[✓] Splash screen shown\n');
+    
+    console.log('[1/4] Starting Python backend...');
     await startPythonBackend();
     console.log('[✓] Backend started successfully\n');
     
@@ -269,11 +299,11 @@ app.whenReady().then(async () => {
     console.log('Waiting 2 seconds for backend to stabilize...');
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    console.log('[2/3] Creating application window...');
+    console.log('[2/4] Creating application window...');
     createWindow();
     console.log('[✓] Window created\n');
     
-    console.log('[3/3] Setting up system tray...');
+    console.log('[3/4] Setting up system tray...');
     createTray();
     console.log('[✓] Tray icon ready\n');
     
@@ -284,6 +314,12 @@ app.whenReady().then(async () => {
     console.log('App is running. Minimize to tray with X button.');
     console.log('To fully quit: Right-click tray icon → Quit\n');
   } catch (error) {
+    // Close splash on error
+    if (splashWindow) {
+      splashWindow.close();
+      splashWindow = null;
+    }
+    
     console.error('========================================');
     console.error('  ✗ Failed to start application!');
     console.error('========================================');

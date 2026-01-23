@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from database import SessionLocal
-from models import Activity
+from models import Activity, Notification
 import asyncio
 from events import notify
 from config import settings

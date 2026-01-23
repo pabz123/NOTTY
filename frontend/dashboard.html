@@ -368,6 +368,59 @@
   </div>
 </div>
 
+<!-- Create Template Modal -->
+<div id="createTemplateModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Create Activity Template</h2>
+      <button onclick="closeModal('createTemplateModal')" class="btn-close">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="text" id="templateName" placeholder="Template Name" required>
+      <input type="text" id="templateTitle" placeholder="Activity Title Template" required>
+      <textarea id="templateDescription" placeholder="Description Template" rows="3"></textarea>
+      <select id="templatePriority">
+        <option value="medium">Medium Priority</option>
+        <option value="high">High Priority</option>
+        <option value="low">Low Priority</option>
+      </select>
+      <select id="templateCategory">
+        <option value="general">General</option>
+        <option value="work">Work</option>
+        <option value="personal">Personal</option>
+        <option value="health">Health</option>
+        <option value="finance">Finance</option>
+        <option value="education">Education</option>
+      </select>
+      <input type="number" id="templateEstimatedMinutes" placeholder="Estimated time (minutes)" min="1">
+      <input type="number" id="templateNotifyMinutes" placeholder="Notify before (minutes)" value="30" min="5">
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal('createTemplateModal')" class="btn-secondary">Cancel</button>
+      <button onclick="createTemplate()" class="btn-primary">Create Template</button>
+    </div>
+  </div>
+</div>
+
+<!-- Use Template Modal -->
+<div id="useTemplateModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Use Template</h2>
+      <button onclick="closeModal('useTemplateModal')" class="btn-close">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="useTemplateId">
+      <p style="margin-bottom: 16px; color: var(--text-secondary);">Set the deadline for this activity:</p>
+      <input type="datetime-local" id="templateDeadline" required>
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal('useTemplateModal')" class="btn-secondary">Cancel</button>
+      <button onclick="createActivityFromTemplate()" class="btn-primary">Create Activity</button>
+    </div>
+  </div>
+</div>
+
 <script src="dashboard.js"></script>
 </body>
 </html>

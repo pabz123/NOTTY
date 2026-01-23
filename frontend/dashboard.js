@@ -761,6 +761,103 @@ async function deleteTemplate(id) {
   }
 }
 
+function showCreateTemplateModal() {
+  document.getElementById('createTemplateModal').classList.add('active');
+  // Clear form
+  document.getElementById('templateName').value = '';
+  document.getElementById('templateTitle').value = '';
+  document.getElementById('templateDescription').value = '';
+  document.getElementById('templatePriority').value = 'medium';
+  document.getElementById('templateCategory').value = 'general';
+  document.getElementById('templateEstimatedMinutes').value = '';
+  document.getElementById('templateNotifyMinutes').value = '30';
+}
+
+async function createTemplate() {
+  const name = document.getElementById('templateName').value.trim();
+  const title = document.getElementById('templateTitle').value.trim();
+  const description = document.getElementById('templateDescription').value.trim();
+  const priority = document.getElementById('templatePriority').value;
+  const category = document.getElementById('templateCategory').value;
+  const estimatedMinutes = document.getElementById('templateEstimatedMinutes').value;
+  const notificationMinutes = parseInt(document.getElementById('templateNotifyMinutes').value) || 30;
+
+  if (!name || !title) {
+    showToast('Please fill in template name and title', 'warning');
+    return;
+  }
+
+  try {
+    const response = await apiRequest('/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        title_template: title,
+        description_template: description || null,
+        priority,
+        category,
+        estimated_minutes: estimatedMinutes ? parseInt(estimatedMinutes) : null,
+        notification_minutes: notificationMinutes
+      })
+    });
+
+    if (response.ok) {
+      showToast('Template created successfully', 'success');
+      closeModal('createTemplateModal');
+      loadTemplates();
+    } else {
+      const error = await response.json();
+      showToast(error.detail || 'Failed to create template', 'error');
+    }
+  } catch (error) {
+    console.error('Failed to create template:', error);
+    showToast('Failed to create template', 'error');
+  }
+}
+
+function useTemplate(templateId) {
+  document.getElementById('useTemplateId').value = templateId;
+  document.getElementById('useTemplateModal').classList.add('active');
+  
+  // Set default deadline to tomorrow at current time
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  document.getElementById('templateDeadline').value = formatDatetimeLocal(tomorrow);
+}
+
+async function createActivityFromTemplate() {
+  const templateId = document.getElementById('useTemplateId').value;
+  const deadline = document.getElementById('templateDeadline').value;
+
+  if (!deadline) {
+    showToast('Please set a deadline', 'warning');
+    return;
+  }
+
+  try {
+    const deadlineISO = new Date(deadline).toISOString();
+    const response = await apiRequest(
+      `/templates/${templateId}/create-activity?deadline=${encodeURIComponent(deadlineISO)}`,
+      { method: 'POST' }
+    );
+
+    if (response.ok) {
+      showToast('Activity created from template', 'success');
+      closeModal('useTemplateModal');
+      loadActivities();
+      // Switch to activities view
+      switchView('activities');
+    } else {
+      const error = await response.json();
+      showToast(error.detail || 'Failed to create activity', 'error');
+    }
+  } catch (error) {
+    console.error('Failed to create activity from template:', error);
+    showToast('Failed to create activity', 'error');
+  }
+}
+
 // ============= SETTINGS =============
 
 function toggleRecurringOptions() {

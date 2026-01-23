@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from datetime import timezone
 from database import engine, SessionLocal
-from models import Base, Activity, User, ActivityNote, Subtask, ActivityTemplate, ActivityHistory, ActivityAttachment
-from schemas import ActivityCreate, ActivityResponse, ActivityUpdate, UserRegister, UserLogin, Token, UserResponse, ActivityNoteCreate, ActivityNoteResponse, SubtaskCreate, SubtaskUpdate, SubtaskResponse, TemplateCreate, TemplateResponse, ActivityHistoryResponse, AttachmentResponse
+from models import Base, Activity, User, ActivityNote, Subtask, ActivityTemplate, ActivityHistory, ActivityAttachment, Notification
+from schemas import ActivityCreate, ActivityResponse, ActivityUpdate, UserRegister, UserLogin, Token, UserResponse, ActivityNoteCreate, ActivityNoteResponse, SubtaskCreate, SubtaskUpdate, SubtaskResponse, TemplateCreate, TemplateResponse, ActivityHistoryResponse, AttachmentResponse, NotificationResponse
 from fastapi.responses import StreamingResponse
 import asyncio
 from events import subscribers, broadcast
@@ -124,25 +124,37 @@ def change_password(
     db: Session = Depends(get_db)
 ):
     """Change user password"""
-    current_password = password_data.get("current_password")
-    new_password = password_data.get("new_password")
-    
-    if not current_password or not new_password:
-        raise HTTPException(status_code=400, detail="Both current and new passwords are required")
-    
-    # Verify current password
-    if not verify_password(current_password, current_user.password_hash):
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
-    
-    # Validate new password
-    if len(new_password) < 6:
-        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
-    
-    # Update password
-    current_user.password_hash = get_password_hash(new_password)
-    db.commit()
-    
-    return {"message": "Password updated successfully"}
+    try:
+        current_password = password_data.get("current_password")
+        new_password = password_data.get("new_password")
+        
+        if not current_password or not new_password:
+            raise HTTPException(status_code=400, detail="Both current and new passwords are required")
+        
+        # Get the user from the database to ensure we have a fresh instance
+        user = db.query(User).filter(User.id == current_user.id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Verify current password
+        if not verify_password(current_password, user.password_hash):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        
+        # Validate new password
+        if len(new_password) < 6:
+            raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+        
+        # Update password
+        user.password_hash = get_password_hash(new_password)
+        db.commit()
+        db.refresh(user)
+        
+        return {"message": "Password updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update password: {str(e)}")
 
 # ==================== ACTIVITY ENDPOINTS ====================
 
@@ -907,7 +919,12 @@ def get_templates(current_user: User = Depends(get_current_user), db: Session = 
     return db.query(ActivityTemplate).filter(ActivityTemplate.user_id == current_user.id).all()
 
 @app.post("/templates/{template_id}/create-activity", response_model=ActivityResponse)
-def create_activity_from_template(template_id: int, deadline: datetime, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_activity_from_template(
+    template_id: int, 
+    deadline: datetime, 
+    current_user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
     try:
         template = db.query(ActivityTemplate).filter(ActivityTemplate.id == template_id).first()
         if not template:
@@ -958,6 +975,90 @@ def delete_template(template_id: int, current_user: User = Depends(get_current_u
     db.delete(template)
     db.commit()
     return {"message": "Template deleted successfully"}
+
+# ==================== NOTIFICATION ENDPOINTS ====================
+
+@app.get("/notifications", response_model=list[NotificationResponse])
+def get_notifications(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    unread_only: bool = False
+):
+    """Get notifications for current user (last 24 hours)"""
+    query = db.query(Notification).filter(Notification.user_id == current_user.id)
+    
+    if unread_only:
+        query = query.filter(Notification.is_read == False)
+    
+    # Only show last 24 hours
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    query = query.filter(Notification.created_at >= cutoff)
+    
+    notifications = query.order_by(Notification.created_at.desc()).all()
+    return notifications
+
+@app.get("/notifications/unread-count")
+def get_unread_count(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get count of unread notifications"""
+    count = db.query(Notification).filter(
+        Notification.user_id == current_user.id,
+        Notification.is_read == False
+    ).count()
+    return {"count": count}
+
+@app.put("/notifications/{notification_id}/read")
+def mark_notification_read(
+    notification_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Mark a notification as read"""
+    notification = db.query(Notification).filter(
+        Notification.id == notification_id,
+        Notification.user_id == current_user.id
+    ).first()
+    
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    
+    notification.is_read = True
+    db.commit()
+    return {"message": "Notification marked as read"}
+
+@app.put("/notifications/mark-all-read")
+def mark_all_read(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Mark all notifications as read"""
+    db.query(Notification).filter(
+        Notification.user_id == current_user.id,
+        Notification.is_read == False
+    ).update({"is_read": True})
+    db.commit()
+    return {"message": "All notifications marked as read"}
+
+@app.delete("/notifications/{notification_id}")
+def delete_notification(
+    notification_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a specific notification"""
+    notification = db.query(Notification).filter(
+        Notification.id == notification_id,
+        Notification.user_id == current_user.id
+    ).first()
+    
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    
+    db.delete(notification)
+    db.commit()
+    return {"message": "Notification deleted"}
 
 # ==================== BATCH OPERATIONS ====================
 
@@ -1053,6 +1154,36 @@ def log_activity_history(
         new_value=new_value
     )
     db.add(history_entry)
+
+def create_notification(
+    db: Session, 
+    user_id: int, 
+    notification_type: str, 
+    title: str, 
+    message: str = None, 
+    activity_id: int = None
+):
+    """Helper function to create notifications"""
+    notification = Notification(
+        user_id=user_id,
+        type=notification_type,
+        title=title,
+        message=message,
+        activity_id=activity_id
+    )
+    db.add(notification)
+    db.commit()
+    db.refresh(notification)
+    
+    # Broadcast via SSE
+    broadcast({
+        "type": notification_type,
+        "title": title,
+        "message": message,
+        "notification_id": notification.id
+    })
+    
+    return notification
 
 
 # ==================== FILE ATTACHMENT ENDPOINTS ====================
