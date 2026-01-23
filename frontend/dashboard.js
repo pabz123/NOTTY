@@ -9,6 +9,10 @@ window.register = register;
 window.logout = logout;
 window.showLogin = showLogin;
 window.showRegister = showRegister;
+window.markNotificationRead = markNotificationRead;
+window.markAllNotificationsRead = markAllNotificationsRead;
+window.deleteNotification = deleteNotification;
+window.clearAllNotifications = clearAllNotifications;
 
 // Theme Management
 const savedTheme = localStorage.getItem('theme') || 'light';
@@ -270,6 +274,7 @@ function switchView(viewName) {
   // Load view data
   if (viewName === 'dashboard') loadDashboard();
   else if (viewName === 'activities') loadActivities();
+  else if (viewName === 'notifications') loadNotifications();
   else if (viewName === 'analytics') loadAnalytics();
   else if (viewName === 'templates') loadTemplates();
   else if (viewName === 'settings') loadSettings();
@@ -940,6 +945,161 @@ async function loadSettings() {
   document.getElementById('enableBrowserNotifications').checked = notificationPerm;
 }
 
+// ============= NOTIFICATIONS VIEW =============
+
+async function loadNotifications() {
+  try {
+    const response = await apiRequest('/notifications');
+    const notifications = await response.json();
+    
+    const container = document.getElementById('notificationsList');
+    
+    if (notifications.length === 0) {
+      container.innerHTML = `
+        <div class="notification-empty">
+          <div class="notification-empty-icon">🔔</div>
+          <p>No notifications yet</p>
+          <p style="font-size: 13px; margin-top: 8px;">You'll see notifications here for the past 24 hours</p>
+        </div>
+      `;
+      return;
+    }
+    
+    container.innerHTML = notifications.map(notif => {
+      const icon = getNotificationIcon(notif.type);
+      const timeAgo = getTimeAgo(notif.created_at);
+      const unreadClass = notif.is_read ? '' : 'unread';
+      
+      return `
+        <div class="notification-item ${unreadClass} type-${notif.type}" data-id="${notif.id}">
+          <div class="notification-icon-large">${icon}</div>
+          <div class="notification-content">
+            <div class="notification-title">${notif.title}</div>
+            ${notif.message ? `<div class="notification-message">${notif.message}</div>` : ''}
+            <div class="notification-time">
+              <span>🕐</span>
+              <span>${timeAgo}</span>
+            </div>
+          </div>
+          <div class="notification-actions">
+            ${!notif.is_read ? `<button onclick="markNotificationRead(${notif.id})" class="btn-sm btn-secondary" title="Mark as read">✓</button>` : ''}
+            <button onclick="deleteNotification(${notif.id})" class="btn-sm btn-danger" title="Delete">🗑️</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    // Update unread count
+    await updateUnreadCount();
+  } catch (error) {
+    console.error('Failed to load notifications:', error);
+    showToast('Failed to load notifications', 'error');
+  }
+}
+
+function getNotificationIcon(type) {
+  const icons = {
+    'due_soon': '⏰',
+    'missed': '❌',
+    'completed': '✅',
+    'created': '➕',
+    'updated': '📝',
+    'deleted': '🗑️',
+    'snoozed': '😴'
+  };
+  return icons[type] || '🔔';
+}
+
+function getTimeAgo(dateString) {
+  const date = new Date(dateString);
+  const now = new Date();
+  const seconds = Math.floor((now - date) / 1000);
+  
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+async function updateUnreadCount() {
+  try {
+    const response = await apiRequest('/notifications/unread-count');
+    const data = await response.json();
+    const badge = document.getElementById('unreadBadge');
+    
+    if (data.unread_count > 0) {
+      badge.textContent = data.unread_count;
+      badge.style.display = 'block';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch (error) {
+    console.error('Failed to update unread count:', error);
+  }
+}
+
+async function markNotificationRead(id) {
+  try {
+    await apiRequest(`/notifications/${id}/read`, {
+      method: 'PUT'
+    });
+    loadNotifications();
+    showToast('Marked as read', 'success');
+  } catch (error) {
+    console.error('Failed to mark notification as read:', error);
+    showToast('Failed to mark as read', 'error');
+  }
+}
+
+async function markAllNotificationsRead() {
+  try {
+    await apiRequest('/notifications/mark-all-read', {
+      method: 'PUT'
+    });
+    loadNotifications();
+    showToast('All notifications marked as read', 'success');
+  } catch (error) {
+    console.error('Failed to mark all as read:', error);
+    showToast('Failed to mark all as read', 'error');
+  }
+}
+
+async function deleteNotification(id) {
+  try {
+    await apiRequest(`/notifications/${id}`, {
+      method: 'DELETE'
+    });
+    loadNotifications();
+    showToast('Notification deleted', 'success');
+  } catch (error) {
+    console.error('Failed to delete notification:', error);
+    showToast('Failed to delete notification', 'error');
+  }
+}
+
+async function clearAllNotifications() {
+  if (!confirm('Are you sure you want to delete all notifications? This cannot be undone.')) {
+    return;
+  }
+  
+  try {
+    const response = await apiRequest('/notifications');
+    const notifications = await response.json();
+    
+    for (const notif of notifications) {
+      await apiRequest(`/notifications/${notif.id}`, {
+        method: 'DELETE'
+      });
+    }
+    
+    loadNotifications();
+    showToast('All notifications cleared', 'success');
+  } catch (error) {
+    console.error('Failed to clear notifications:', error);
+    showToast('Failed to clear notifications', 'error');
+  }
+}
+
 // ============= UTILITIES =============
 
 function showToast(message, type = 'info') {
@@ -1004,6 +1164,9 @@ function connectSSE() {
 
 function handleNotification(data) {
   console.log('Notification received:', data);
+  
+  // Update unread count whenever a notification comes in
+  updateUnreadCount();
   
   switch (data.type) {
     case 'connected':
@@ -1111,6 +1274,10 @@ function initApp() {
   
   // Request browser notification permission
   requestNotificationPermission();
+  
+  // Update unread notification count
+  updateUnreadCount();
+  setInterval(updateUnreadCount, 60000); // Update every minute
 }
 
 // Check authentication on load (use auth_token like app.js)

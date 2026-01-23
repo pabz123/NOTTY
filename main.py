@@ -30,7 +30,12 @@ def to_utc(dt: datetime) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+    print(f"Database initialized: {settings.database_url}")
+except Exception as e:
+    print(f"ERROR: Failed to initialize database: {e}")
+    raise
 
 # Create upload directory
 os.makedirs(settings.upload_dir, exist_ok=True)

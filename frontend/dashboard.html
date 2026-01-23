@@ -53,6 +53,11 @@
         <span class="nav-icon">📋</span>
         <span>Activities</span>
       </a>
+      <a href="#" class="nav-item" data-view="notifications">
+        <span class="nav-icon">🔔</span>
+        <span>Notifications</span>
+        <span id="unreadBadge" class="unread-badge" style="display: none;">0</span>
+      </a>
       <a href="#" class="nav-item" data-view="analytics">
         <span class="nav-icon">📊</span>
         <span>Analytics</span>
@@ -190,6 +195,24 @@
           <h3>Performance Metrics</h3>
           <div id="metricsContent" class="metrics-content"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- Notifications View -->
+    <div id="notificationsView" class="view">
+      <header class="view-header">
+        <h1>Notifications</h1>
+        <div class="header-actions">
+          <button onclick="markAllNotificationsRead()" class="btn-secondary">Mark All Read</button>
+          <button onclick="clearAllNotifications()" class="btn-danger">Clear All</button>
+        </div>
+      </header>
+      
+      <div class="content-card">
+        <p style="color: var(--text-secondary); margin-bottom: 20px;">
+          📅 Showing notifications from the past 24 hours. Older notifications are automatically deleted.
+        </p>
+        <div id="notificationsList" class="notifications-list"></div>
       </div>
     </div>
 

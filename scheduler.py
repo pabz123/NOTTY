@@ -62,6 +62,17 @@ def check_missed_activities():
                 print(f"  Original deadline: {activity.deadline}")
                 print(f"  Converted to UTC: {activity_deadline_utc}")
                 
+                # Create database notification
+                from models import Notification
+                notification = Notification(
+                    user_id=activity.user_id,
+                    type="missed",
+                    title=f"Deadline Missed: {activity.title}",
+                    message=f"Was due on {activity.deadline.strftime('%Y-%m-%d %H:%M')}",
+                    activity_id=activity.id
+                )
+                db.add(notification)
+                
                 # Send email notification for missed deadline
                 send_email_notification(
                     activity.title,
@@ -118,6 +129,17 @@ def check_due_soon():
                 print(f"[{now}] Sending notification for activity '{activity.title}' due in {activity.notification_minutes} minutes")
                 print(f"  Original deadline: {activity.deadline}")
                 print(f"  Converted to UTC: {activity_deadline_utc}")
+                
+                # Create database notification
+                from models import Notification
+                notification = Notification(
+                    user_id=activity.user_id,
+                    type="due_soon",
+                    title=f"Activity Due Soon: {activity.title}",
+                    message=f"Due in {activity.notification_minutes} minutes",
+                    activity_id=activity.id
+                )
+                db.add(notification)
                 
                 # Send email notification
                 send_email_notification(
