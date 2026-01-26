@@ -19,6 +19,8 @@ class Activity(Base):
     reminded = Column(Boolean, default=False)
     is_recurring = Column(Boolean, default=False)
     recurrence_pattern = Column(String, nullable=True)  # daily, weekly, monthly
+    recurrence_days = Column(String, nullable=True)  # JSON string: ["monday", "wednesday", "friday"] for daily recurring
+    recurrence_end_date = Column(DateTime, nullable=True)  # When to stop generating instances
     notification_minutes = Column(Integer, default=30)  # minutes before deadline
     snoozed_until = Column(DateTime, nullable=True)
     estimated_minutes = Column(Integer, nullable=True)  # Estimated time to complete

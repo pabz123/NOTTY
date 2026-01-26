@@ -327,6 +327,12 @@ def update_activity(activity_id: int, activity_update: ActivityUpdate, current_u
             old_deadline = str(activity.deadline)
             activity.deadline = new_deadline
             changes.append(("deadline", old_deadline, str(activity.deadline)))
+            
+            # Reset status to pending if deadline changed and activity was missed
+            if activity.status == "missed" and new_deadline > now:
+                activity.status = "pending"
+                activity.reminded = False  # Reset reminder flag
+                changes.append(("status", "missed", "pending"))
         
         if activity_update.priority is not None:
             if activity_update.priority not in ["low", "medium", "high"]:
@@ -360,6 +366,16 @@ def update_activity(activity_id: int, activity_update: ActivityUpdate, current_u
             old_pattern = activity.recurrence_pattern
             activity.recurrence_pattern = activity_update.recurrence_pattern
             changes.append(("recurrence_pattern", old_pattern, activity.recurrence_pattern))
+        
+        if activity_update.recurrence_days is not None:
+            old_days = activity.recurrence_days
+            activity.recurrence_days = activity_update.recurrence_days
+            changes.append(("recurrence_days", old_days, activity.recurrence_days))
+        
+        if activity_update.recurrence_end_date is not None:
+            old_end = activity.recurrence_end_date
+            activity.recurrence_end_date = activity_update.recurrence_end_date
+            changes.append(("recurrence_end_date", str(old_end) if old_end else None, str(activity.recurrence_end_date)))
         
         if activity_update.estimated_minutes is not None:
             old_est = activity.estimated_minutes

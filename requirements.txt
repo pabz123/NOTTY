@@ -10,3 +10,4 @@ pydantic-settings
 python-multipart
 aiofiles
 slowapi
+win10toast

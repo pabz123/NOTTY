@@ -173,6 +173,70 @@ def check_due_soon():
 scheduler.add_job(check_due_soon, "interval", minutes=1)
 
 
+def reset_missed_recurring_activities():
+    """Reset missed recurring activities back to pending after grace period"""
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        print(f"[{now}] Checking for missed recurring activities to reset...")
+        
+        # Grace period: 30 minutes after deadline
+        grace_period_minutes = 30
+        
+        # Find missed recurring activities
+        missed_recurring = db.query(Activity).filter(
+            Activity.is_recurring == True,
+            Activity.status == "missed"
+        ).all()
+        
+        reset_count = 0
+        for activity in missed_recurring:
+            # Handle timezone
+            if activity.deadline.tzinfo is None:
+                activity_deadline_utc = activity.deadline.replace(tzinfo=timezone.utc)
+            else:
+                activity_deadline_utc = activity.deadline.astimezone(timezone.utc)
+            
+            grace_end = activity_deadline_utc + timedelta(minutes=grace_period_minutes)
+            
+            # If grace period has passed, generate next occurrence
+            if now > grace_end:
+                # Calculate next occurrence based on pattern
+                if activity.recurrence_pattern == "daily":
+                    next_deadline = activity_deadline_utc + timedelta(days=1)
+                    # Ensure it's in the future
+                    while next_deadline < now:
+                        next_deadline += timedelta(days=1)
+                elif activity.recurrence_pattern == "weekly":
+                    next_deadline = activity_deadline_utc + timedelta(weeks=1)
+                    while next_deadline < now:
+                        next_deadline += timedelta(weeks=1)
+                elif activity.recurrence_pattern == "monthly":
+                    next_deadline = activity_deadline_utc + timedelta(days=30)
+                    while next_deadline < now:
+                        next_deadline += timedelta(days=30)
+                else:
+                    continue
+                
+                # Update the activity with new deadline and reset status
+                activity.deadline = next_deadline
+                activity.status = "pending"
+                activity.reminded = False
+                reset_count += 1
+                print(f"[{now}] Reset recurring activity '{activity.title}' to pending with new deadline {next_deadline}")
+        
+        if reset_count > 0:
+            db.commit()
+            print(f"[{now}] Reset {reset_count} missed recurring activities")
+    except Exception as e:
+        print(f"[{datetime.now(timezone.utc)}] Error in reset_missed_recurring_activities: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+scheduler.add_job(reset_missed_recurring_activities, "interval", minutes=5)
+
+
 def generate_recurring_tasks():
     """Generate new instances of recurring tasks when completed."""
     db = SessionLocal()

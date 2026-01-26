@@ -13,6 +13,8 @@ window.markNotificationRead = markNotificationRead;
 window.markAllNotificationsRead = markAllNotificationsRead;
 window.deleteNotification = deleteNotification;
 window.clearAllNotifications = clearAllNotifications;
+window.saveSoundPreference = saveSoundPreference;
+window.saveDefaultNotificationTime = saveDefaultNotificationTime;
 
 // Theme Management
 const savedTheme = localStorage.getItem('theme') || 'light';
@@ -926,6 +928,22 @@ function toggleBrowserNotifications() {
   }
 }
 
+function saveSoundPreference() {
+  const enabled = document.getElementById('enableSoundNotifications').checked;
+  localStorage.setItem('soundNotifications', enabled ? 'true' : 'false');
+  showToast('Sound preference saved', 'success');
+}
+
+function saveDefaultNotificationTime() {
+  const minutes = document.getElementById('defaultNotificationMinutes').value;
+  if (minutes >= 5 && minutes <= 1440) {
+    localStorage.setItem('defaultNotificationMinutes', minutes);
+    showToast('Default notification time saved', 'success');
+  } else {
+    showToast('Please enter a value between 5 and 1440 minutes', 'error');
+  }
+}
+
 async function loadSettings() {
   // Load user info
   try {
@@ -940,9 +958,15 @@ async function loadSettings() {
   // Set theme radios
   updateThemeRadios();
   
-  // Set notification preferences
+  // Set notification preferences from localStorage
   const notificationPerm = Notification.permission === 'granted';
   document.getElementById('enableBrowserNotifications').checked = notificationPerm;
+  
+  const soundEnabled = localStorage.getItem('soundNotifications') === 'true';
+  document.getElementById('enableSoundNotifications').checked = soundEnabled;
+  
+  const defaultMinutes = localStorage.getItem('defaultNotificationMinutes') || '30';
+  document.getElementById('defaultNotificationMinutes').value = defaultMinutes;
 }
 
 // ============= NOTIFICATIONS VIEW =============
@@ -950,9 +974,19 @@ async function loadSettings() {
 async function loadNotifications() {
   try {
     const response = await apiRequest('/notifications');
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
     const notifications = await response.json();
     
     const container = document.getElementById('notificationsList');
+    
+    if (!container) {
+      console.error('Notifications container not found');
+      return;
+    }
     
     if (notifications.length === 0) {
       container.innerHTML = `
@@ -993,7 +1027,16 @@ async function loadNotifications() {
     await updateUnreadCount();
   } catch (error) {
     console.error('Failed to load notifications:', error);
-    showToast('Failed to load notifications', 'error');
+    const container = document.getElementById('notificationsList');
+    if (container) {
+      container.innerHTML = `
+        <div class="notification-empty">
+          <div class="notification-empty-icon">⚠️</div>
+          <p>Failed to load notifications</p>
+          <p style="font-size: 13px; margin-top: 8px; color: var(--danger);">${error.message}</p>
+        </div>
+      `;
+    }
   }
 }
 

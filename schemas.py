@@ -30,6 +30,8 @@ class ActivityCreate(BaseModel):
     category: str = "general"  # general, work, personal, health, finance, education, other
     is_recurring: bool = False
     recurrence_pattern: str | None = None  # daily, weekly, monthly
+    recurrence_days: str | None = None  # JSON string for specific days
+    recurrence_end_date: datetime | None = None  # When to stop generating
     notification_minutes: int = 30  # minutes before deadline
     estimated_minutes: int | None = None  # Estimated time in minutes
 
@@ -42,6 +44,8 @@ class ActivityUpdate(BaseModel):
     notification_minutes: Optional[int] = None
     is_recurring: Optional[bool] = None
     recurrence_pattern: Optional[str] = None
+    recurrence_days: Optional[str] = None
+    recurrence_end_date: Optional[datetime] = None
     estimated_minutes: Optional[int] = None
     actual_minutes: Optional[int] = None
 
@@ -55,6 +59,8 @@ class ActivityResponse(BaseModel):
     category: str
     is_recurring: bool
     recurrence_pattern: str | None
+    recurrence_days: str | None
+    recurrence_end_date: datetime | None
     notification_minutes: int
     snoozed_until: datetime | None
     estimated_minutes: int | None
@@ -137,6 +143,7 @@ class AttachmentResponse(BaseModel):
     id: int
     activity_id: int
     filename: str
+    filepath: str
     filesize: int
     content_type: str | None
     uploaded_at: datetime
@@ -147,6 +154,7 @@ class AttachmentResponse(BaseModel):
 
 class NotificationResponse(BaseModel):
     id: int
+    user_id: int
     type: str
     title: str
     message: str | None
